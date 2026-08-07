@@ -1,0 +1,8 @@
+{
+  "projectName": "Motor_Guide",
+  "projectRoot": "D:\\Magicup\\MY_WORK\\Motor_Guide",
+  "sourceOfTruth": ".",
+  "testScript": "tests\\run-project-test.ps1",
+  "firstAgent": "CODEX",
+  "createdAtKst": "2026-08-07 15:10:17"
+}
