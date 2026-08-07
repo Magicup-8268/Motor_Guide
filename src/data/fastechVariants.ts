@@ -61,20 +61,60 @@ export const fastechVariantsBySeries: Record<string, FastechMotorVariant[]> = {
   ]),
 }
 
+/**
+ * Frame-specific drive values transcribed from the official 제품보기 drive
+ * specification table on each series page.  A family record can only publish the
+ * combined range ("24 VDC ±10% / 48 VDC ±10% (모델별)"), which is misleading on a
+ * single frame, so the confirmed per-frame value is used whenever one exists.
+ * 확인일: 2026-08-07 · 출처: fastech-motions.com 시리즈별 제품보기 드라이브 사양 표.
+ */
+export interface FastechFrameDriveSpec {
+  ratedVoltage: string
+  ratedSpeedText?: string
+  maxSpeedText?: string
+  maxSpeed?: number
+}
+
+const fastechFrameDriveSpecs: Record<string, Record<number, FastechFrameDriveSpec>> = {
+  'Ezi-SERVO II EtherCAT ALL': {
+    42: { ratedVoltage: '24 VDC ±10%', ratedSpeedText: '0–3,000 rpm', maxSpeedText: '3,000 rpm', maxSpeed: 3000 },
+    56: { ratedVoltage: '24 VDC ±10%', ratedSpeedText: '0–3,000 rpm', maxSpeedText: '3,000 rpm', maxSpeed: 3000 },
+    60: { ratedVoltage: '24 VDC ±10%', ratedSpeedText: '0–3,000 rpm', maxSpeedText: '3,000 rpm', maxSpeed: 3000 },
+    86: { ratedVoltage: '48 VDC ±10%', ratedSpeedText: '0–2,000 rpm', maxSpeedText: '2,000 rpm', maxSpeed: 2000 },
+  },
+  'Ezi-STEP BT': {
+    42: { ratedVoltage: '24 VDC ±10%' },
+    56: { ratedVoltage: '24 VDC ±10%' },
+    86: { ratedVoltage: '40–70 VDC' },
+  },
+}
+
+export function fastechFrameDriveSpec(series: string, frameSize: number) {
+  return fastechFrameDriveSpecs[series]?.[frameSize]
+}
+
 export function fastechVariantsFor(product: Pick<MotorProduct, 'brand' | 'series'>) {
   return product.brand === 'FASTECH' ? fastechVariantsBySeries[product.series] ?? [] : []
 }
 
 export function fastechVariantSpecs(product: MotorProduct, variant: FastechMotorVariant): MotorSpecs {
+  const frame = fastechFrameDriveSpec(product.series, variant.frameSize)
   return {
     ...product.specs,
+    ratedVoltage: frame?.ratedVoltage ?? product.specs.ratedVoltage,
     holdingTorque: variant.holdingTorque,
+    // The family range must not leak into a single sub-model.
+    holdingTorqueText: undefined,
     ratedTorque: undefined,
-    ratedTorqueText: `홀딩 토크 ${variant.holdingTorque} Nm`,
+    ratedTorqueText: undefined,
     torqueBasis: '홀딩 토크(정지 유지 기준)',
-    ratedCurrent: variant.phaseCurrent,
-    ratedCurrentText: `상전류 ${variant.phaseCurrent} A`,
+    ratedCurrent: undefined,
+    ratedCurrentText: undefined,
+    phaseCurrentText: `${variant.phaseCurrent} A`,
     currentSummary: `상전류 ${variant.phaseCurrent} A`,
+    ratedSpeedText: frame?.ratedSpeedText ?? product.specs.ratedSpeedText,
+    maxSpeedText: frame?.maxSpeedText ?? product.specs.maxSpeedText,
+    maxSpeed: frame?.maxSpeed ?? product.specs.maxSpeed,
     flange: undefined,
     flangeText: `□${variant.frameSize} mm`,
     inertia: undefined,

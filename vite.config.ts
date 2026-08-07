@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { drawingArchivesBySeries } from './src/data/drawings'
+import { fastechVariantSpecs, fastechVariantsFor } from './src/data/fastechVariants'
 import { manualPdfBySeries } from './src/data/manuals'
 import { categories, motors } from './src/data/motors'
 import { selectionCapabilityValue, supportsSelectionProtocol, supportsSelectionVoltage } from './src/utils/selectionFilters'
@@ -116,7 +117,7 @@ function modelSpecRows(product: typeof motors[number]) {
     ? specs.ratedPowerOptions.map((value) => `${formatPdfNumber(value)} W`).join(' · ')
     : specs.ratedPower !== undefined ? `${formatPdfNumber(specs.ratedPower)} W` : specs.powerRange ?? ''
   const ratedTorque = specs.ratedTorqueText ?? (specs.ratedTorque !== undefined ? `${formatPdfNumber(specs.ratedTorque)} Nm` : '')
-  const holdingTorque = specs.holdingTorque !== undefined ? `${formatPdfNumber(specs.holdingTorque)} Nm` : ''
+  const holdingTorque = specs.holdingTorqueText ?? (specs.holdingTorque !== undefined ? `${formatPdfNumber(specs.holdingTorque)} Nm` : '')
   const maxTorque = specs.maxTorqueText ?? (specs.maxTorque !== undefined ? `${formatPdfNumber(specs.maxTorque)} Nm` : '')
   const ratedSpeed = specs.ratedSpeedText ?? (specs.ratedSpeed !== undefined ? `${formatPdfNumber(specs.ratedSpeed)} rpm` : '')
   const maxSpeed = specs.maxSpeedText ?? (specs.maxSpeed !== undefined ? `${formatPdfNumber(specs.maxSpeed)} rpm` : '')
@@ -557,7 +558,8 @@ function modelSpecPdfRoute(): Plugin {
       server.middlewares.use('/api/model-spec-pdf', async (request, response, next) => {
         if (request.method !== 'GET') return next()
 
-        const modelId = new URL(request.url ?? '', 'http://localhost').searchParams.get('id')
+        const requestParams = new URL(request.url ?? '', 'http://localhost').searchParams
+        const modelId = requestParams.get('id')
         const product = modelId ? motors.find((item) => item.id === modelId) : undefined
         if (!product) {
           response.statusCode = 404
@@ -566,9 +568,15 @@ function modelSpecPdfRoute(): Plugin {
           return
         }
 
+        // A FASTECH family covers many frame sizes, so the card has to be built from
+        // the sub-model the user actually selected in the detail view.
+        const variantId = requestParams.get('variant')
+        const variant = variantId ? fastechVariantsFor(product).find((item) => item.id === variantId) : undefined
+        const target = variant ? { ...product, model: variant.model, specs: fastechVariantSpecs(product, variant) } : product
+
         try {
           const origin = `http://${request.headers.host ?? 'localhost'}`
-          const pdf = await buildModelSpecPdf(modelSpecPdfPayload(product, origin))
+          const pdf = await buildModelSpecPdf(modelSpecPdfPayload(target, origin))
           response.statusCode = 200
           response.setHeader('Content-Type', 'application/pdf')
           response.setHeader('Content-Length', String(pdf.byteLength))

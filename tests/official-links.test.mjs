@@ -1021,3 +1021,60 @@ test('project BOMs retain procurement fields, accept motor-drive configurations,
   assert.match(styles, /\.bom-modal \{/)
   assert.match(styles, /\.bom-table \{/)
 })
+
+test('a selected FASTECH sub-model drives every detail panel with its own frame values instead of the family range', async () => {
+  const vite = await createServer({ root: process.cwd(), appType: 'custom', server: { middlewareMode: true } })
+
+  try {
+    const [{ externalMotors }, variants] = await Promise.all([
+      vite.ssrLoadModule('/src/data/externalCatalog.ts'),
+      vite.ssrLoadModule('/src/data/fastechVariants.ts'),
+    ])
+    const [app, viteConfig] = await Promise.all([readFile(appPath, 'utf8'), readFile(viteConfigPath, 'utf8')])
+
+    const ethercat = externalMotors.find((product) => product.series === 'Ezi-SERVO II EtherCAT ALL')
+    const stepBt = externalMotors.find((product) => product.series === 'Ezi-STEP BT')
+    assert.ok(ethercat && stepBt)
+
+    // A family record publishes a combined range; a single frame must not repeat it.
+    assert.equal(ethercat.specs.holdingTorqueText, '0.44–12 Nm')
+    assert.equal(ethercat.specs.ratedTorqueText, undefined)
+
+    const findVariant = (product, model) => variants.fastechVariantsFor(product).find((variant) => variant.model === model)
+    const ethercat42m = findVariant(ethercat, 'Ezi-SERVO II EtherCAT ALL-42M')
+    const ethercat86xl = findVariant(ethercat, 'Ezi-SERVO II EtherCAT ALL-86XL')
+    const step42s = findVariant(stepBt, 'Ezi-STEP BT-42S')
+    const step86xl = findVariant(stepBt, 'Ezi-STEP BT-86XL')
+    assert.ok(ethercat42m && ethercat86xl && step42s && step86xl)
+
+    const lowFrame = variants.fastechVariantSpecs(ethercat, ethercat42m)
+    const highFrame = variants.fastechVariantSpecs(ethercat, ethercat86xl)
+    assert.equal(lowFrame.ratedVoltage, '24 VDC ±10%')
+    assert.equal(lowFrame.ratedSpeedText, '0–3,000 rpm')
+    assert.equal(lowFrame.holdingTorque, 0.44)
+    assert.equal(lowFrame.holdingTorqueText, undefined)
+    assert.equal(lowFrame.ratedTorqueText, undefined)
+    assert.equal(lowFrame.ratedCurrentText, undefined)
+    assert.equal(lowFrame.phaseCurrentText, '1.2 A')
+    assert.equal(highFrame.ratedVoltage, '48 VDC ±10%')
+    assert.equal(highFrame.ratedSpeedText, '0–2,000 rpm')
+    assert.equal(highFrame.maxSpeed, 2000)
+    assert.equal(highFrame.holdingTorque, 12)
+    assert.equal(highFrame.phaseCurrentText, '6 A')
+
+    assert.equal(variants.fastechVariantSpecs(stepBt, step42s).ratedVoltage, '24 VDC ±10%')
+    assert.equal(variants.fastechVariantSpecs(stepBt, step86xl).ratedVoltage, '40–70 VDC')
+
+    // The Korean guide, the share text, and the PDF card all follow the selected sub-model.
+    assert.match(app, /const displayProduct: MotorProduct = selectedFastechVariant/)
+    assert.match(app, /<ManualPanel product=\{displayProduct\}/)
+    assert.match(app, /onShare\(displayProduct\)/)
+    assert.match(app, /onDownloadSpecPdf\(product, selectedFastechVariant\?\.id\)/)
+    assert.match(app, /downloadUrl\.searchParams\.set\('variant', fastechVariantId\)/)
+    assert.match(app, /\['상전류', specs\.phaseCurrentText \?\? ''\]/)
+    assert.match(viteConfig, /requestParams\.get\('variant'\)/)
+    assert.match(viteConfig, /fastechVariantsFor\(product\)\.find\(\(item\) => item\.id === variantId\)/)
+  } finally {
+    await vite.close()
+  }
+})

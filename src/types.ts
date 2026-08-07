@@ -40,8 +40,12 @@ export interface MotorSpecs {
   /** Published torque basis such as stall, continuous, or peak. */
   torqueBasis?: string
   holdingTorque?: number
+  /** Published holding-torque range text when a family covers several frame sizes. */
+  holdingTorqueText?: string
   ratedCurrent?: number
   ratedCurrentText?: string
+  /** Published per-phase current for stepping/closed-loop stepping motors, which is not a rated servo current. */
+  phaseCurrentText?: string
   maxCurrent?: number
   maxCurrentText?: string
   ratedSpeed?: number

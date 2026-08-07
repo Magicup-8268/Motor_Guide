@@ -386,6 +386,10 @@ function maxTorqueLabel(specs: MotorSpecs) {
   return metricLabel(specs.maxTorqueText, specs.maxTorque, 'Nm')
 }
 
+function holdingTorqueLabel(specs: MotorSpecs) {
+  return metricLabel(specs.holdingTorqueText, specs.holdingTorque, 'Nm')
+}
+
 function ratedCurrentLabel(specs: MotorSpecs) {
   return metricLabel(specs.ratedCurrentText, specs.ratedCurrent, 'A')
 }
@@ -448,9 +452,10 @@ function specsToRows(specs: MotorSpecs) {
     ['정격 토크', ratedTorqueLabel(specs)],
     ['최대 토크', maxTorqueLabel(specs)],
     ['토크 기준', specs.torqueBasis ?? ''],
-    ['홀딩 토크', specs.holdingTorque !== undefined ? `${formatNumber(specs.holdingTorque)} Nm` : ''],
+    ['홀딩 토크', holdingTorqueLabel(specs)],
     ['입력 전류', specs.inputCurrent ?? ''],
     ['정격 전류', ratedCurrentLabel(specs)],
+    ['상전류', specs.phaseCurrentText ?? ''],
     ['연속 출력 전류', specs.continuousCurrent ?? ''],
     ['최대 전류', maxCurrentLabel(specs)],
     ['피크 출력 전류', specs.peakCurrent ?? ''],
@@ -486,7 +491,7 @@ function capacityLabel(product: MotorProduct) {
   const { specs } = product
   const ratedPower = ratedPowerLabel(specs)
   if (ratedPower) return ratedPower
-  if (specs.holdingTorque !== undefined) return `홀딩 ${formatNumber(specs.holdingTorque)} Nm`
+  if (holdingTorqueLabel(specs)) return `홀딩 ${holdingTorqueLabel(specs)}`
   if (specs.ratedTorque !== undefined) return `${formatNumber(specs.ratedTorque)} Nm`
   if (maxTorqueLabel(specs)) return maxTorqueLabel(specs)
   return '공식 사양표 확인'
@@ -673,11 +678,16 @@ function clearSharedSelectionHash() {
 
 function operatingSummary(product: MotorProduct) {
   const { specs } = product
+  const capacity = capacityLabel(product)
+  const holdingTorque = holdingTorqueLabel(specs)
+  // The capacity label already carries the holding torque for stepping families,
+  // so repeating it would print the same figure twice in one line.
+  const holdingTorqueIsRepeated = Boolean(holdingTorque) && capacity.includes(holdingTorque)
   return [
     specs.ratedVoltage ?? specs.dcInputRange,
-    capacityLabel(product),
+    capacity,
     ratedTorqueLabel(specs) ? `정격 토크 ${ratedTorqueLabel(specs)}` : undefined,
-    specs.holdingTorque !== undefined ? `홀딩 토크 ${formatNumber(specs.holdingTorque)} Nm` : undefined,
+    holdingTorque && !holdingTorqueIsRepeated ? `홀딩 토크 ${holdingTorque}` : undefined,
     ratedSpeedLabel(specs) ? `정격 속도 ${ratedSpeedLabel(specs)}` : undefined,
   ].filter(Boolean).join(' · ')
 }
@@ -1110,7 +1120,7 @@ interface DetailModalProps {
   onFavorite: (id: string) => void
   onCompare: (id: string) => void
   onShare: (product: MotorProduct) => void
-  onDownloadSpecPdf: (product: MotorProduct) => void
+  onDownloadSpecPdf: (product: MotorProduct, fastechVariantId?: string) => void
   pdfDownloadPending: boolean
   onOpenOfficial: (product: MotorProduct) => void
   onOpenDrive: (url: string) => void
@@ -1128,7 +1138,11 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
   const [selectedFastechVariantId, setSelectedFastechVariantId] = useState(initialFastechVariantId ?? fastechVariants[0]?.id ?? '')
   const selectedFastechVariant = fastechVariants.find((variant) => variant.id === selectedFastechVariantId) ?? fastechVariants[0]
-  const rows = specsToRows(selectedFastechVariant ? fastechVariantSpecs(product, selectedFastechVariant) : product.specs)
+  // Every panel below must describe the selected sub-model, not the family range.
+  const displayProduct: MotorProduct = selectedFastechVariant
+    ? { ...product, model: selectedFastechVariant.model, specs: fastechVariantSpecs(product, selectedFastechVariant) }
+    : product
+  const rows = specsToRows(displayProduct.specs)
 
   useEffect(() => setActiveTab(initialTab), [initialTab, product.id])
   useEffect(() => setSelectedFastechVariantId(initialFastechVariantId ?? fastechVariants[0]?.id ?? ''), [initialFastechVariantId, product.id])
@@ -1166,13 +1180,13 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
           </dl>
           <DriveCompatibilityPanel product={product} onOpenDrive={onOpenDrive} selectedDriveKey={selectedDriveKey} onSelectDrive={onSelectDrive} onCopyPairing={onCopyPairing} onAddToBom={onAddToBom} />
           <p className="source-note">{sourceLabel}. 값이 공개되지 않은 항목은 의도적으로 표시하지 않았습니다.</p>
-          </> : <ManualPanel product={product} onOpenManual={onOpenManual} onOpenOfficial={onOpenOfficial} onOpenDrawing={onOpenDrawing} />}
+          </> : <ManualPanel product={displayProduct} onOpenManual={onOpenManual} onOpenOfficial={onOpenOfficial} onOpenDrawing={onOpenDrawing} />}
         </div>
         <div className="detail-actions">
-          <button className="button secondary pdf-download" onClick={() => onDownloadSpecPdf(product)} disabled={pdfDownloadPending}>
+          <button className="button secondary pdf-download" onClick={() => onDownloadSpecPdf(product, selectedFastechVariant?.id)} disabled={pdfDownloadPending}>
             <Icon name="install" size={17} /> {pdfDownloadPending ? 'PDF 생성 중...' : 'PDF 카드'}
           </button>
-          <button className="button secondary share-button" onClick={() => onShare(product)}>
+          <button className="button secondary share-button" onClick={() => onShare(displayProduct)}>
             <Icon name="share" size={17} /> 사양 공유
           </button>
           <button className={`button secondary ${favorite ? 'is-active' : ''}`} onClick={() => onFavorite(product.id)}>
@@ -1794,11 +1808,12 @@ export default function App() {
       setComparisonDownloadPending(false)
     }
   }
-  const downloadModelSpecPdf = async (product: MotorProduct) => {
+  const downloadModelSpecPdf = async (product: MotorProduct, fastechVariantId?: string) => {
     setModelPdfPendingId(product.id)
     try {
       const downloadUrl = new URL('/api/model-spec-pdf', window.location.origin)
       downloadUrl.searchParams.set('id', product.id)
+      if (fastechVariantId) downloadUrl.searchParams.set('variant', fastechVariantId)
       const response = await fetch(downloadUrl)
       if (!response.ok) throw new Error(`Model PDF export failed with ${response.status}`)
 

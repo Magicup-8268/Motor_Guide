@@ -521,7 +521,7 @@ const fastechMotors: MotorProduct[] = [
     summary: '모터·고분해능 엔코더·드라이브를 한 몸체에 통합한 클로즈드 루프 스테핑 시스템입니다.',
     features: ['모터·엔코더·드라이브 일체형', '클로즈드 루프 · 게인 조정/헌팅 최소화', 'Pulse I/O 최대 500 kHz'],
     tags: ['FASTECH', '파스텍', 'Ezi-SERVO', 'Ezi-SERVO II BT', '일체형 서보', '24V', 'Pulse', '클로즈드 루프', '홀딩 토크 2.4Nm'],
-    specs: { ratedVoltage: '24 VDC ±10%', holdingTorque: 2.4, ratedTorqueText: '홀딩 토크 0.069–2.4 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, maxSpeedText: '0–3,000 rpm', currentSummary: '상전류 0.95–4.0 A (모델별)', encoder: '고분해능 엔코더', resolution: '16,000 / 20,000 pulse/rev (모델별)', physicalConnection: 'Pulse I/O (1/2 Pulse, 최대 500 kHz)', protocols: ['Pulse / I/O'], safety: '과전류·과전압·저전압·과열 보호' },
+    specs: { ratedVoltage: '24 VDC ±10%', holdingTorque: 2.4, holdingTorqueText: '0.069–2.4 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, currentSummary: '상전류 0.95–4.0 A (모델별)', encoder: '고분해능 엔코더', resolution: '16,000 / 20,000 pulse/rev (모델별)', physicalConnection: 'Pulse I/O (1/2 Pulse, 최대 500 kHz)', protocols: ['Pulse / I/O'], safety: '과전류·과전압·저전압·과열 보호' },
     officialUrl: fastechServoBt, sourceChecked: '2026-07-20', weight: 88,
   },
   {
@@ -529,7 +529,7 @@ const fastechMotors: MotorProduct[] = [
     summary: '모터·고분해능 엔코더·드라이브·모션 컨트롤러를 통합해 위치 테이블 제어를 지원하는 일체형 서보입니다.',
     features: ['모터·엔코더·드라이브·모션 컨트롤러 일체형', 'RS-485 다축 연결 · 위치 테이블 제어', 'NEMA24 IP65 옵션'],
     tags: ['FASTECH', '파스텍', 'Ezi-SERVO', 'Ezi-SERVO ALL', '일체형 서보', '24V', 'RS-485', '모션 컨트롤러', '홀딩 토크 2.4Nm'],
-    specs: { ratedVoltage: '24 VDC ±10%', holdingTorque: 2.4, ratedTorqueText: '홀딩 토크 0.069–2.4 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, maxSpeedText: '0–3,000 rpm', currentSummary: '상전류 0.95–4.0 A (모델별)', encoder: '고분해능 엔코더', resolution: '16,000 / 20,000 pulse/rev (모델별)', baudRate: '9,600–921,600 bps', physicalConnection: 'RS-485', protocols: ['RS-485'], operatingModes: '위치 테이블 제어', ipRating: 'NEMA24: IP65 옵션' },
+    specs: { ratedVoltage: '24 VDC ±10%', holdingTorque: 2.4, holdingTorqueText: '0.069–2.4 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, currentSummary: '상전류 0.95–4.0 A (모델별)', encoder: '고분해능 엔코더', resolution: '16,000 / 20,000 pulse/rev (모델별)', baudRate: '9,600–921,600 bps', physicalConnection: 'RS-485', protocols: ['RS-485'], operatingModes: '위치 테이블 제어', ipRating: 'NEMA24: IP65 옵션' },
     officialUrl: fastechServoAll, sourceChecked: '2026-07-20', weight: 90,
   },
   {
@@ -537,7 +537,7 @@ const fastechMotors: MotorProduct[] = [
     summary: '고분해능 엔코더와 EtherCAT 드라이브를 모터에 통합하고 CiA402 프로파일을 지원하는 클로즈드 루프 스테핑 시스템입니다.',
     features: ['모터·엔코더·EtherCAT 드라이브 일체형', 'EtherCAT CoE (CiA402) · FoE', '0.44–12 Nm 홀딩 토크 범위'],
     tags: ['FASTECH', '파스텍', 'Ezi-SERVO', 'Ezi-SERVO II EtherCAT ALL', '일체형 서보', '24V', '48V', 'EtherCAT', 'CiA402', 'FoE', '홀딩 토크 12Nm'],
-    specs: { ratedVoltage: '24 VDC ±10% / 48 VDC ±10% (모델별)', holdingTorque: 12, ratedTorqueText: '홀딩 토크 0.44–12 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm (24 V) / 0–2,000 rpm (48 V)', maxSpeed: 3000, maxSpeedText: '최대 3,000 rpm (24 V)', currentSummary: '상전류 1.2–6.0 A (모델별)', encoder: '고분해능 엔코더', resolution: '16,000 / 20,000 pulse/rev (모델별)', physicalConnection: 'EtherCAT', protocols: ['EtherCAT', 'CoE (CiA402)', 'FoE'], operatingModes: 'Profile Position · Homing · Cyclic Synchronous Position' },
+    specs: { ratedVoltage: '24 VDC ±10% / 48 VDC ±10% (모델별)', holdingTorque: 12, holdingTorqueText: '0.44–12 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm (24 V) / 0–2,000 rpm (48 V)', maxSpeed: 3000, maxSpeedText: '3,000 rpm (24 V) / 2,000 rpm (48 V)', currentSummary: '상전류 1.2–6.0 A (모델별)', encoder: '고분해능 엔코더', resolution: '16,000 / 20,000 pulse/rev (모델별)', physicalConnection: 'EtherCAT', protocols: ['EtherCAT', 'CoE (CiA402)', 'FoE'], operatingModes: 'Profile Position · Homing · Cyclic Synchronous Position' },
     officialUrl: fastechServoEthercatAll, sourceChecked: '2026-07-20', weight: 94,
   },
   {
@@ -545,7 +545,7 @@ const fastechMotors: MotorProduct[] = [
     summary: '스테핑 모터와 마이크로스텝 드라이브를 통합한 배선 절감형 일체형 스테핑 제품군입니다.',
     features: ['모터·드라이브 일체형', 'PWM 마이크로스텝 · 소프트웨어 댐핑', 'Pulse I/O 최대 500 kHz'],
     tags: ['FASTECH', '파스텍', 'Ezi-STEP', 'Ezi-STEP BT', '일체형 스테퍼', '24V', '48V', 'Pulse', '마이크로스텝', '홀딩 토크 12Nm'],
-    specs: { ratedVoltage: '24 VDC ±10% / 40-70 VDC (86 mm)', holdingTorque: 12, ratedTorqueText: '홀딩 토크 0.32–12 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, maxSpeedText: '0–3,000 rpm', currentSummary: '상전류 1.2 / 3.0 / 6.0 A (프레임별)', physicalConnection: 'Pulse I/O (1/2 Pulse, 최대 500 kHz)', protocols: ['Pulse / I/O'], operatingModes: '마이크로스텝 · Run/Stop 제어', safety: '과전류·과전압·저전압·과열 보호' },
+    specs: { ratedVoltage: '24 VDC ±10% / 40-70 VDC (86 mm)', holdingTorque: 12, holdingTorqueText: '0.32–12 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, currentSummary: '상전류 1.2 / 3.0 / 6.0 A (프레임별)', physicalConnection: 'Pulse I/O (1/2 Pulse, 최대 500 kHz)', protocols: ['Pulse / I/O'], operatingModes: '마이크로스텝 · Run/Stop 제어', safety: '과전류·과전압·저전압·과열 보호' },
     officialUrl: fastechStepBt, sourceChecked: '2026-07-20', weight: 87,
   },
   {
@@ -553,7 +553,7 @@ const fastechMotors: MotorProduct[] = [
     summary: '스테핑 모터·드라이브·모션 컨트롤러·네트워크를 한 몸체에 통합해 소형 다축 제어에 쓰는 일체형 스테핑 시스템입니다.',
     features: ['모터·드라이브·모션 컨트롤러 일체형', 'RS-485 최대 16축 데이지 체인', '64 모션 스텝 · 마이크로스텝'],
     tags: ['FASTECH', '파스텍', 'Ezi-STEP', 'Ezi-STEP ALL', '일체형 스테퍼', '24V', 'RS-485', '16축', '64 모션 스텝', '홀딩 토크 1.5Nm'],
-    specs: { ratedVoltage: '24 VDC ±10%', holdingTorque: 1.5, ratedTorqueText: '홀딩 토크 0.32–1.5 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, maxSpeedText: '0–3,000 rpm', currentSummary: '상전류 1.2 / 3.0 A (프레임별)', baudRate: '9,600–921,600 bps', physicalConnection: 'RS-485 (최대 16축 데이지 체인)', protocols: ['RS-485'], operatingModes: '64 모션 스텝 · 마이크로스텝 · Run/Stop 제어' },
+    specs: { ratedVoltage: '24 VDC ±10%', holdingTorque: 1.5, holdingTorqueText: '0.32–1.5 Nm', torqueBasis: '홀딩 토크(정지 유지 기준)', ratedSpeedText: '0–3,000 rpm', maxSpeed: 3000, currentSummary: '상전류 1.2 / 3.0 A (프레임별)', baudRate: '9,600–921,600 bps', physicalConnection: 'RS-485 (최대 16축 데이지 체인)', protocols: ['RS-485'], operatingModes: '64 모션 스텝 · 마이크로스텝 · Run/Stop 제어' },
     officialUrl: fastechStepAll, sourceChecked: '2026-07-20', weight: 89,
   },
 ]
