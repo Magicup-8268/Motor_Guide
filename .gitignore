@@ -4,6 +4,12 @@ dist/
 
 .gstack/
 
+# Local/generated workspace artifacts (preserved locally, excluded from handoff history)
+.codex-remote-attachments/
+tmp/
+OUTPUT/
+qa-*.png
+
 
 # CoWork local lock
 /.cowork/ACTIVE.json

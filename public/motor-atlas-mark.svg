@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Motor Atlas">
+  <rect width="128" height="128" rx="28" fill="#08111e"/>
+  <path d="M31 46h30v36H31zM67 38h18v52H67zM91 50h8v28h-8z" fill="none" stroke="#91d6ff" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M38 64h16m20 0h4m20 0h10" stroke="#f6c65b" stroke-width="8" stroke-linecap="round"/>
+</svg>
+

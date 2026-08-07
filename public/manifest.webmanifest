@@ -1,0 +1,21 @@
+{
+  "name": "Magicup-Work-Flow | Kinco Motor Guide",
+  "short_name": "Magicup-Work-Flow",
+  "description": "Kinco 모터 사양을 검색·비교하는 Magicup-Work-Flow",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "lang": "ko-KR",
+  "display": "standalone",
+  "background_color": "#08111e",
+  "theme_color": "#08111e",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/motor-atlas-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
