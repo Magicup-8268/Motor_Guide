@@ -14,3 +14,5 @@ qa-*.png
 # CoWork local lock
 /.cowork/ACTIVE.json
 /.cowork/*.tmp
+
+logs/
