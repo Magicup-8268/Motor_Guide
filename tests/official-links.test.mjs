@@ -85,7 +85,10 @@ test('mobile LAN launcher starts the app on the stable phone port', async () => 
   const launcher = await readFile(mobileLauncherPath, 'utf8')
 
   assert.match(launcher, /npm run dev:lan -- --strictPort/)
-  assert.match(launcher, /http:\/\/192\.168\.1\.24:5173/)
+  // The phone address is looked up at run time (Wi-Fi IPv4 changes with DHCP)
+  // instead of a hard-coded IP that goes stale after a lease renewal.
+  assert.match(launcher, /Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi'/)
+  assert.match(launcher, /http:\/\/%WIFI_IP%:5173/)
   assert.match(launcher, /Get-NetTCPConnection -LocalPort 5173/)
 })
 

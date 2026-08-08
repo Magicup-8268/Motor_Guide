@@ -3,9 +3,12 @@ setlocal
 cd /d "%~dp0"
 title Magicup-Work-Flow - 휴대폰 LAN 실행
 
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty IPAddress)"`) do set WIFI_IP=%%A
+if not defined WIFI_IP set WIFI_IP=Wi-Fi 연결을 확인하세요
+
 echo.
 echo Magicup-Work-Flow를 같은 Wi-Fi의 휴대폰에서 사용할 수 있도록 실행합니다.
-echo 휴대폰 주소: http://192.168.1.24:5173
+echo 휴대폰 주소: http://%WIFI_IP%:5173
 echo.
 echo 이 창을 닫으면 휴대폰 접속도 종료됩니다.
 echo.
