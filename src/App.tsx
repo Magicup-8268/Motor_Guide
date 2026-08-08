@@ -9,6 +9,11 @@ import { categoryProductImageFor, productImageFor } from './data/productImages'
 import type { BrandId, CategoryId, MotorProduct, MotorSpecs } from './types'
 import { selectionCapabilityValue, supportsSelectionProtocol, supportsSelectionVoltage, type SelectionProtocol, type SelectionVoltage } from './utils/selectionFilters'
 
+// GitHub Pages 등 정적 호스팅에는 PDF/엑셀 생성용 Vite 서버 미들웨어가 없다.
+// 빌드 시 VITE_SERVER_API_AVAILABLE=false 를 주입하면 관련 기능을 안내 메시지로 대체한다.
+const SERVER_API_AVAILABLE = import.meta.env.VITE_SERVER_API_AVAILABLE !== 'false'
+const SERVER_ONLY_NOTICE = 'PC 로컬 실행(npm run dev)에서만 지원되는 기능입니다. 온라인(GitHub Pages) 배포판에서는 사용할 수 없습니다.'
+
 const storageKeys = {
   favorites: 'motor-atlas:favorites:v1',
   favoriteMetadata: 'motor-atlas:favorite-metadata:v1',
@@ -1649,7 +1654,13 @@ export default function App() {
     setBomOpen(true)
     setNotice('프로젝트 BOM에 모터+드라이브 조합을 담았습니다.')
   }
+  const ensureServerApiAvailable = () => {
+    if (SERVER_API_AVAILABLE) return true
+    setNotice(SERVER_ONLY_NOTICE)
+    return false
+  }
   const downloadBomProject = async (project: BomProject) => {
+    if (!ensureServerApiAvailable()) return
     setBomDownloadPending(true)
     try {
       const response = await fetch(new URL('/api/project-bom-xlsx', window.location.origin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project }) })
@@ -1693,6 +1704,7 @@ export default function App() {
   const openManual = (product: MotorProduct) => {
     const manual = manualPdfFor(product)
     if (!manual) return
+    if (!ensureServerApiAvailable()) return
     setRecents((current) => [product.id, ...current.filter((id) => id !== product.id)].slice(0, 10))
     const manualUrl = new URL('/api/manual-pdf', window.location.origin)
     manualUrl.searchParams.set('series', product.series)
@@ -1704,6 +1716,7 @@ export default function App() {
       window.open(drawing.url, '_blank', 'noopener,noreferrer')
       return
     }
+    if (!ensureServerApiAvailable()) return
     const drawingUrl = new URL('/api/drawing-zip', window.location.origin)
     drawingUrl.searchParams.set('series', product.series)
     drawingUrl.searchParams.set('id', drawing.id)
@@ -1786,6 +1799,7 @@ export default function App() {
   }
 
   const downloadComparison = async (products: MotorProduct[]) => {
+    if (!ensureServerApiAvailable()) return
     setComparisonDownloadPending(true)
     try {
       const downloadUrl = new URL('/api/comparison-xlsx', window.location.origin)
@@ -1809,6 +1823,7 @@ export default function App() {
     }
   }
   const downloadModelSpecPdf = async (product: MotorProduct, fastechVariantId?: string) => {
+    if (!ensureServerApiAvailable()) return
     setModelPdfPendingId(product.id)
     try {
       const downloadUrl = new URL('/api/model-spec-pdf', window.location.origin)
@@ -1837,6 +1852,7 @@ export default function App() {
       setNotice('먼저 선정 조건을 적용해 주세요.')
       return
     }
+    if (!ensureServerApiAvailable()) return
     setSelectionReportPending(true)
     try {
       const response = await fetch(new URL('/api/selection-report-pdf', window.location.origin), {

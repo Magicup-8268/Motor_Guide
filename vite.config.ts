@@ -630,6 +630,12 @@ function selectionReportPdfRoute(): Plugin {
   }
 }
 
+// GitHub Pages는 https://<user>.github.io/Motor_Guide/ 하위 경로에서 제공되므로
+// 정적 배포 빌드에서는 base 경로를 지정해야 자산(JS/CSS/이미지) 경로가 깨지지 않는다.
+// (로컬 npm run dev / npm run build에는 영향 없음 — GH_PAGES=true 일 때만 적용)
+const isGithubPagesBuild = process.env.GH_PAGES === 'true'
+
 export default defineConfig({
+  base: isGithubPagesBuild ? '/Motor_Guide/' : '/',
   plugins: [react(), manualPdfProxy(), modelSpecPdfRoute(), selectionReportPdfRoute()],
 })

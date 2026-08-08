@@ -1,5 +1,8 @@
 const CACHE = 'magicup-work-flow-shell-v4'
-const APP_SHELL = ['/', '/index.html', '/magicup-logo.svg', '/motor-atlas-mark.svg', '/manifest.webmanifest']
+// sw.js가 배포되는 위치(루트 `/` 또는 GitHub Pages 하위 경로 `/Motor_Guide/`)를 스스로 계산해
+// 어느 base 경로에서 서비스워커가 등록되어도 올바른 파일을 캐시하도록 한다.
+const BASE = new URL('.', self.location.href).pathname
+const APP_SHELL = [BASE, `${BASE}index.html`, `${BASE}magicup-logo.svg`, `${BASE}motor-atlas-mark.svg`, `${BASE}manifest.webmanifest`]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)))
@@ -46,11 +49,12 @@ async function cacheFirstAsset(request) {
 
 async function networkFirstNavigation(request) {
   const cache = await caches.open(CACHE)
+  const shellIndex = `${BASE}index.html`
   try {
     const response = await fetch(request)
-    if (response.ok) cache.put('/index.html', response.clone())
+    if (response.ok) cache.put(shellIndex, response.clone())
     return response
   } catch {
-    return (await cache.match(request)) || (await cache.match('/index.html')) || Response.error()
+    return (await cache.match(request)) || (await cache.match(shellIndex)) || Response.error()
   }
 }

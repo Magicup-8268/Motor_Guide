@@ -59,14 +59,14 @@ test('application supports home-screen installation and caches its same-origin a
     readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
   ])
 
-  assert.match(main, /navigator\.serviceWorker\.register\('\/sw\.js'\)/)
+  assert.match(main, /navigator\.serviceWorker\.register\(`\$\{import\.meta\.env\.BASE_URL\}sw\.js`\)/)
   assert.match(main, /import\.meta\.env\.PROD/)
   assert.match(main, /navigator\.serviceWorker\.getRegistrations\(\)/)
   assert.match(index, /apple-mobile-web-app-capable/)
-  assert.match(manifest, /"id": "\/"/)
-  assert.match(manifest, /"start_url": "\/\?source=pwa"/)
+  assert.match(manifest, /"id": "\."/)
+  assert.match(manifest, /"start_url": "\.\/\?source=pwa"/)
   assert.match(manifest, /"display": "standalone"/)
-  assert.match(manifest, /"src": "\/motor-atlas-mark\.svg"/)
+  assert.match(manifest, /"src": "motor-atlas-mark\.svg"/)
   assert.match(serviceWorker, /magicup-work-flow-shell-v4/)
   assert.match(serviceWorker, /cacheFirstAsset/)
   assert.match(serviceWorker, /networkFirstNavigation/)
