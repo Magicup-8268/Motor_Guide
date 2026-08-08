@@ -2,7 +2,19 @@
 
 KINCO, ROBOTIS DYNAMIXEL, LS메카피온, KOMOTEK의 모터·액추에이터를 공식 공개 사양 기준으로 검색·필터·비교하는 로컬 우선 PWA입니다.
 
-## 실행
+## 접속 방법
+
+### 1) 온라인 (GitHub Pages) — Wi-Fi·IP 무관, PC·휴대폰 모두 가능
+
+<https://magicup-8268.github.io/Motor_Guide/>
+
+`main` 브랜치에 푸시될 때마다 GitHub Actions(`.github/workflows/deploy-pages.yml`)가 자동으로 빌드·배포합니다. 서버가 없는 정적 사이트이므로 아래 기능은 이 주소에서 지원되지 않고 안내 메시지만 표시됩니다(2번 PC 로컬 실행에서만 가능).
+
+- 모델 사양 PDF 카드 / 선정 결과 PDF 보고서 다운로드
+- 비교표 · 프로젝트 BOM 엑셀 다운로드
+- 공식 매뉴얼 PDF · 도면 ZIP 열기
+
+### 2) PC 로컬 실행 — 위 기능 전체 포함
 
 ```powershell
 npm install
@@ -15,7 +27,9 @@ npm run dev
 npm run dev:lan
 ```
 
-프로덕션 빌드 검증은 `npm run build`입니다.
+`PC용_실행.cmd` / `휴대폰용_실행.cmd`를 더블클릭해도 동일하게 실행됩니다.
+
+프로덕션 빌드 검증은 `npm run build`입니다. GitHub Pages용 정적 빌드를 로컬에서 재현하려면 `GH_PAGES=true`와 `VITE_SERVER_API_AVAILABLE=false` 환경변수를 설정한 뒤 `npm run build`를 실행합니다.
 
 ## 제공 기능
 
