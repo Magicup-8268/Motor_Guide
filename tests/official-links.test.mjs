@@ -808,7 +808,7 @@ test('selection filters validate every registered model against normalized publi
       vite.ssrLoadModule('/src/utils/selectionFilters.ts'),
     ])
 
-    assert.equal(motors.length, 243)
+    assert.equal(motors.length, 255)
     assert.equal(new Set(motors.map((product) => product.id)).size, motors.length)
 
     const selectionVoltage = { '5v': 5, '12v': 12, '24v': 24, '48v': 48, '96v': 96, '220v': 220 }
@@ -846,8 +846,9 @@ test('selection filters validate every registered model against normalized publi
       for (const value of [product.specs.ratedPower, product.specs.ratedTorque, product.specs.maxTorque, product.specs.holdingTorque, product.specs.ratedCurrent, product.specs.maxCurrent, product.specs.ratedSpeed, product.specs.maxSpeed]) {
         if (value !== undefined) assert.ok(Number.isFinite(value) && value >= 0, `${product.model} 수치 사양은 유효한 0 이상 숫자여야 합니다.`)
       }
-      const expectedCapability = ['ROBOTIS', 'FASTECH'].includes(product.brand)
-        ? product.specs.maxTorque ?? product.specs.ratedTorque ?? product.specs.holdingTorque ?? -1
+      // 브레이크는 정지 마찰 토크, ROBOTIS·FASTECH는 공개 토크, 나머지는 출력(W)을 선정 기준으로 삼는다.
+      const expectedCapability = product.categoryId === 'brake' || ['ROBOTIS', 'FASTECH'].includes(product.brand)
+        ? product.specs.staticFrictionTorque ?? product.specs.maxTorque ?? product.specs.ratedTorque ?? product.specs.holdingTorque ?? -1
         : product.specs.selectionMaxPower ?? (product.specs.ratedPowerOptions?.length ? Math.max(...product.specs.ratedPowerOptions) : product.specs.ratedPower ?? -1)
       assert.equal(filters.selectionCapabilityValue(product), expectedCapability, `${product.model}의 선정 기준 단위가 제조사 기준과 일치해야 합니다.`)
     }
@@ -1077,6 +1078,78 @@ test('a selected FASTECH sub-model drives every detail panel with its own frame 
     assert.match(app, /\['상전류', specs\.phaseCurrentText \?\? ''\]/)
     assert.match(viteConfig, /requestParams\.get\('variant'\)/)
     assert.match(viteConfig, /fastechVariantsFor\(product\)\.find\(\(item\) => item\.id === variantId\)/)
+  } finally {
+    await vite.close()
+  }
+})
+
+test('Miki Pulley BXR spring-applied brakes are registered as brakes, not motors', async () => {
+  const vite = await createServer({
+    root: process.cwd(),
+    appType: 'custom',
+    server: { middlewareMode: true },
+  })
+
+  try {
+    const [{ motors, categories, brandCatalogs }, filters, drives] = await Promise.all([
+      vite.ssrLoadModule('/src/data/motors.ts'),
+      vite.ssrLoadModule('/src/utils/selectionFilters.ts'),
+      vite.ssrLoadModule('/src/data/drives.ts'),
+    ])
+
+    // The brand and the brake category are both registered.
+    assert.ok(brandCatalogs.some((brand) => brand.id === 'mikipulley' && brand.name === '미키풀리'))
+    assert.ok(categories.some((category) => category.id === 'brake' && category.name === '브레이크'))
+
+    const brakes = motors.filter((product) => product.brand === '미키풀리')
+    assert.equal(brakes.length, 12)
+    assert.ok(brakes.every((product) => product.categoryId === 'brake'))
+    assert.ok(brakes.every((product) => product.officialUrl.startsWith('https://www.mikipulley-us.com/')))
+
+    // Official published static friction torque, exactly as listed by Miki Pulley.
+    const torqueByModel = Object.fromEntries(brakes.map((product) => [product.id, product.specs.staticFrictionTorque]))
+    assert.deepEqual(torqueByModel, {
+      'mikipulley-bxr-le-015': 0.06,
+      'mikipulley-bxr-le-020': 0.14,
+      'mikipulley-bxr-le-025': 0.32,
+      'mikipulley-bxr-le-035': 0.62,
+      'mikipulley-bxr-le-040': 1.32,
+      'mikipulley-bxr-le-050': 3.2,
+      'mikipulley-bxr-06': 5,
+      'mikipulley-bxr-08': 12,
+      'mikipulley-bxr-10': 16,
+      'mikipulley-bxr-12': 30,
+      'mikipulley-bxr-14': 38,
+      'mikipulley-bxr-16': 55,
+    })
+
+    // Brakes are selected by static friction torque, never by watts.
+    for (const brake of brakes) {
+      assert.equal(filters.selectionCapabilityUnit(brake), 'torque')
+      assert.equal(filters.selectionCapabilityValue(brake), brake.specs.staticFrictionTorque)
+      assert.equal(brake.specs.ratedPower, undefined)
+      assert.equal(brake.specs.powerRange, undefined)
+    }
+
+    // A brake never renders a motor drive-selection panel.
+    for (const brake of brakes) {
+      const compatibility = drives.driveCompatibilityFor(brake)
+      assert.equal(compatibility.matches.length, 0)
+      assert.match(compatibility.badge, /브레이크/)
+      assert.ok(compatibility.checks.length > 0)
+    }
+
+    // The 24 V standard-model coil supply stays filterable; BXR-LE has no published coil voltage yet.
+    const bxr10 = brakes.find((product) => product.id === 'mikipulley-bxr-10')
+    assert.equal(bxr10.specs.ratedVoltage, '24 VDC')
+    assert.equal(filters.supportsSelectionVoltage(bxr10, '24v'), true)
+    assert.equal(filters.supportsSelectionVoltage(bxr10, '48v'), false)
+    assert.equal(bxr10.specs.maxSpeed, 5000)
+    assert.equal(bxr10.specs.coilResistance, '27 Ω')
+    assert.equal(bxr10.specs.boreRangeText, '24–28 mm (H7)')
+
+    // Both hub styles are recorded on every frame size so the part number can be picked.
+    assert.ok(brakes.every((product) => typeof product.specs.hubOptions === 'string' && product.specs.hubOptions.length > 0))
   } finally {
     await vite.close()
   }

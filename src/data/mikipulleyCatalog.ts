@@ -1,0 +1,377 @@
+import type { MotorProduct } from '../types'
+
+// 미키풀리(Miki Pulley) 무여자 작동형 브레이크 BXR 계열.
+// 출처: 미키풀리 미국 공식 사이트 제품 페이지(https://www.mikipulley-us.com/)의 공개 사양표.
+// 공개되지 않았거나 확인하지 못한 항목은 값을 추정하지 않고 비워 둔다.
+
+const bxrOverviewUrl = 'https://www.mikipulley-us.com/electromagnetic-brakes-e.m./spring-actuated-brakes/bxr-model-brake'
+const bxrSquareHubUrl = 'https://www.mikipulley-us.com/electromagnetic-brakes-e.m./spring-actuated-brakes/bxr-model-brake/bxr-square-hub'
+const bxrLeSetScrewUrl = 'https://www.mikipulley-us.com/electromagnetic-brakes-e.m./spring-actuated-brakes/bxr-le-model-brake/bxr-le-set-screw-style-hub'
+
+const sourceCheckedOn = '2026-08-08'
+
+/** 무여자 작동형(Spring Actuated) — 전원이 끊기면 스프링 힘으로 제동되는 페일세이프 방식. */
+const springAppliedAction = '무여자 작동형(전원 차단 시 스프링으로 제동되는 페일세이프 방식)'
+
+interface BxrInput {
+  id: string
+  model: string
+  series: string
+  family: string
+  summary: string
+  features: string[]
+  tags: string[]
+  specs: MotorProduct['specs']
+  officialUrl: string
+  weight: number
+}
+
+function bxrBrake(input: BxrInput): MotorProduct {
+  return {
+    ...input,
+    brand: '미키풀리',
+    lifecycle: 'current',
+    categoryId: 'brake',
+    sourceChecked: sourceCheckedOn,
+  }
+}
+
+/**
+ * BXR 표준 모델 — 서보모터 축에 직결하는 홀딩·비상정지용 박형 브레이크.
+ * 허브 방식에 따라 품번 끝자리가 달라진다(-10 사각 허브 / -20 스플라인 허브).
+ */
+const bxrStandardBrakes: MotorProduct[] = [
+  bxrBrake({
+    id: 'mikipulley-bxr-06',
+    model: 'BXR-06-10 / BXR-06-20',
+    series: 'BXR',
+    family: 'BXR',
+    summary: '정지 마찰 토크 5.0 Nm의 무여자 작동형 브레이크입니다. 서보모터 축에 직결해 정지 유지와 비상 제동에 사용합니다.',
+    features: ['정지 마찰 토크 5.0 Nm', '최고 회전속도 5,000 rpm', '외경 83.5 mm · 전고 25.0 mm'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR', '브레이크', '무여자 작동형', '홀딩 브레이크', '24V', '5Nm'],
+    specs: {
+      ratedVoltage: '24 VDC',
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 5,
+      staticFrictionTorqueText: '5.0 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 5000,
+      maxSpeedText: '5,000 rpm',
+      armaturePullInTime: '0.02 초',
+      backlashText: '1.2',
+      totalBrakingEnergy: '2×10⁵ J',
+      coilResistance: '33 Ω',
+      outerDiameterText: '83.50 mm',
+      boltCircleText: '76.00 mm',
+      statorInnerDiameterText: '82.00 mm',
+      overallHeightText: '25.0 mm',
+      boreRangeText: '20–25 mm (H7)',
+      hubOptions: '사각 허브 BXR-06-10 (0.90 kg) · 스플라인 허브 BXR-06-20 (1.00 kg)',
+      weight: 0.9,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrSquareHubUrl,
+    weight: 88,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-08',
+    model: 'BXR-08-10 / BXR-08-20',
+    series: 'BXR',
+    family: 'BXR',
+    summary: '정지 마찰 토크 12.0 Nm의 무여자 작동형 브레이크입니다. 중형 서보 축의 정지 유지와 비상 제동에 사용합니다.',
+    features: ['정지 마찰 토크 12.0 Nm', '최고 회전속도 5,000 rpm', '외경 93.5 mm · 전고 27.0 mm'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR', '브레이크', '무여자 작동형', '홀딩 브레이크', '24V', '12Nm'],
+    specs: {
+      ratedVoltage: '24 VDC',
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 12,
+      staticFrictionTorqueText: '12.0 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 5000,
+      maxSpeedText: '5,000 rpm',
+      armaturePullInTime: '0.02 초',
+      backlashText: '1.2',
+      totalBrakingEnergy: '2×10⁵ J',
+      coilResistance: '30 Ω',
+      outerDiameterText: '93.50 mm',
+      boltCircleText: '85.00 mm',
+      statorInnerDiameterText: '92.00 mm',
+      overallHeightText: '27.0 mm',
+      boreRangeText: '20–25 mm (H7)',
+      hubOptions: '사각 허브 BXR-08-10 (1.20 kg) · 스플라인 허브 BXR-08-20 (1.30 kg)',
+      weight: 1.2,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrSquareHubUrl,
+    weight: 89,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-10',
+    model: 'BXR-10-10 / BXR-10-20',
+    series: 'BXR',
+    family: 'BXR',
+    summary: '정지 마찰 토크 16.0 Nm의 무여자 작동형 브레이크입니다. 전고 24.3 mm의 박형 구조로 좁은 설치 공간에 적용합니다.',
+    features: ['정지 마찰 토크 16.0 Nm', '최고 회전속도 5,000 rpm', '외경 123.5 mm · 전고 24.3 mm'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR', '브레이크', '무여자 작동형', '홀딩 브레이크', '24V', '16Nm'],
+    specs: {
+      ratedVoltage: '24 VDC',
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 16,
+      staticFrictionTorqueText: '16.0 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 5000,
+      maxSpeedText: '5,000 rpm',
+      armaturePullInTime: '0.05 초',
+      backlashText: '0.9',
+      totalBrakingEnergy: '2.2×10⁶ J',
+      coilResistance: '27 Ω',
+      outerDiameterText: '123.50 mm',
+      boltCircleText: '115.00 mm',
+      statorInnerDiameterText: '122.00 mm',
+      overallHeightText: '24.3 mm',
+      boreRangeText: '24–28 mm (H7)',
+      hubOptions: '사각 허브 BXR-10-10 (1.30 kg) · 스플라인 허브 BXR-10-20 (1.50 kg)',
+      weight: 1.3,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrSquareHubUrl,
+    weight: 90,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-12',
+    model: 'BXR-12-10 / BXR-12-20',
+    series: 'BXR',
+    family: 'BXR',
+    summary: '정지 마찰 토크 30.0 Nm의 무여자 작동형 브레이크입니다. 대형 서보 축과 수직축 낙하 방지에 사용합니다.',
+    features: ['정지 마찰 토크 30.0 Nm', '최고 회전속도 5,000 rpm', '외경 137.5 mm · 전고 25.0 mm'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR', '브레이크', '무여자 작동형', '홀딩 브레이크', '24V', '30Nm'],
+    specs: {
+      ratedVoltage: '24 VDC',
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 30,
+      staticFrictionTorqueText: '30.0 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 5000,
+      maxSpeedText: '5,000 rpm',
+      outerDiameterText: '137.50 mm',
+      overallHeightText: '25.0 mm',
+      hubOptions: '사각 허브 BXR-12-10 (2.30 kg) · 스플라인 허브 BXR-12-20 (2.50 kg)',
+      weight: 2.3,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrSquareHubUrl,
+    weight: 91,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-14',
+    model: 'BXR-14-10 / BXR-14-20',
+    series: 'BXR',
+    family: 'BXR',
+    summary: '정지 마찰 토크 38.0 Nm의 무여자 작동형 브레이크입니다. 고부하 축의 정지 유지와 비상 제동에 사용합니다.',
+    features: ['정지 마찰 토크 38.0 Nm', '최고 회전속도 3,600 rpm', '외경 167.5 mm · 전고 25.0 mm'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR', '브레이크', '무여자 작동형', '홀딩 브레이크', '24V', '38Nm'],
+    specs: {
+      ratedVoltage: '24 VDC',
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 38,
+      staticFrictionTorqueText: '38.0 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 3600,
+      maxSpeedText: '3,600 rpm',
+      outerDiameterText: '167.50 mm',
+      overallHeightText: '25.0 mm',
+      hubOptions: '사각 허브 BXR-14-10 (3.00 kg) · 스플라인 허브 BXR-14-20 (3.40 kg)',
+      weight: 3,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrSquareHubUrl,
+    weight: 92,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-16',
+    model: 'BXR-16-10 / BXR-16-20',
+    series: 'BXR',
+    family: 'BXR',
+    summary: 'BXR 계열 최대 용량인 정지 마찰 토크 55.0 Nm의 무여자 작동형 브레이크입니다.',
+    features: ['정지 마찰 토크 55.0 Nm (BXR 최대)', '최고 회전속도 3,600 rpm', '외경 185.0 mm'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR', '브레이크', '무여자 작동형', '홀딩 브레이크', '24V', '55Nm'],
+    specs: {
+      ratedVoltage: '24 VDC',
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 55,
+      staticFrictionTorqueText: '55.0 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 3600,
+      maxSpeedText: '3,600 rpm',
+      outerDiameterText: '185.00 mm',
+      overallHeightText: '32.8 mm (사각 허브) / 32.7 mm (스플라인 허브)',
+      hubOptions: '사각 허브 BXR-16-10 (3.60 kg) · 스플라인 허브 BXR-16-20 (4.00 kg)',
+      weight: 3.6,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrSquareHubUrl,
+    weight: 93,
+  }),
+]
+
+/**
+ * BXR-LE 모델 — BXR 계열의 초박형·초소형 라인.
+ * 허브 방식에 따라 품번 끝자리가 달라진다(-C 세트스크루 / -P 압입).
+ */
+const bxrLeBrakes: MotorProduct[] = [
+  bxrBrake({
+    id: 'mikipulley-bxr-le-015',
+    model: 'BXR-015-10LE-006-C / -P',
+    series: 'BXR-LE',
+    family: 'BXR',
+    summary: 'BXR-LE 계열 최소형으로 정지 마찰 토크 0.06 Nm입니다. 소형 액추에이터와 정밀 스테이지의 정지 유지에 사용합니다.',
+    features: ['정지 마찰 토크 0.06 Nm', '최고 회전속도 6,000 rpm', '외경 26.0 mm · 전고 14.0 mm · 30 g'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR-LE', '브레이크', '무여자 작동형', '초박형', '소형', '0.06Nm'],
+    specs: {
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 0.06,
+      staticFrictionTorqueText: '0.06 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 6000,
+      maxSpeedText: '6,000 rpm',
+      outerDiameterText: '26.00 mm',
+      overallHeightText: '14.0 mm',
+      hubOptions: '세트스크루 허브 BXR-015-10LE-006-C · 압입 허브 BXR-015-10LE-006-P (각 0.030 kg)',
+      weight: 0.03,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrLeSetScrewUrl,
+    weight: 82,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-le-020',
+    model: 'BXR-020-10LE-014-C / -P',
+    series: 'BXR-LE',
+    family: 'BXR',
+    summary: '정지 마찰 토크 0.14 Nm의 초박형 무여자 작동형 브레이크입니다.',
+    features: ['정지 마찰 토크 0.14 Nm', '최고 회전속도 6,000 rpm', '외경 32.0 mm · 전고 14.0 mm · 60 g'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR-LE', '브레이크', '무여자 작동형', '초박형', '소형', '0.14Nm'],
+    specs: {
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 0.14,
+      staticFrictionTorqueText: '0.14 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 6000,
+      maxSpeedText: '6,000 rpm',
+      outerDiameterText: '32.00 mm',
+      overallHeightText: '14.0 mm',
+      hubOptions: '세트스크루 허브 BXR-020-10LE-014-C · 압입 허브 BXR-020-10LE-014-P (각 0.060 kg)',
+      weight: 0.06,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrLeSetScrewUrl,
+    weight: 83,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-le-025',
+    model: 'BXR-025-10LE-032-C / -P',
+    series: 'BXR-LE',
+    family: 'BXR',
+    summary: '정지 마찰 토크 0.32 Nm의 초박형 무여자 작동형 브레이크입니다. 축공 5–8 mm 범위를 지원합니다.',
+    features: ['정지 마찰 토크 0.32 Nm', '최고 회전속도 6,000 rpm', '외경 39.0 mm · 전고 14.0 mm · 80 g'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR-LE', '브레이크', '무여자 작동형', '초박형', '소형', '0.32Nm'],
+    specs: {
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 0.32,
+      staticFrictionTorqueText: '0.32 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 6000,
+      maxSpeedText: '6,000 rpm',
+      armaturePullInTime: '0.035 초',
+      backlashText: '2.9',
+      totalBrakingEnergy: '3,000 J',
+      coilResistance: '35 Ω',
+      outerDiameterText: '39.00 mm',
+      boltCircleText: '33.00 mm',
+      statorInnerDiameterText: '9.00 mm',
+      overallHeightText: '14.0 mm',
+      boreRangeText: '5–8 mm (H7, 표준 8 mm) · 로터 허브 보어 18 mm',
+      hubOptions: '세트스크루 허브 BXR-025-10LE-032-C · 압입 허브 BXR-025-10LE-032-P (각 0.080 kg)',
+      weight: 0.08,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrLeSetScrewUrl,
+    weight: 84,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-le-035',
+    model: 'BXR-035-10LE-062-C / -P',
+    series: 'BXR-LE',
+    family: 'BXR',
+    summary: '정지 마찰 토크 0.62 Nm의 초박형 무여자 작동형 브레이크입니다.',
+    features: ['정지 마찰 토크 0.62 Nm', '최고 회전속도 6,000 rpm', '외경 48.0 mm · 전고 14.0 mm · 120 g'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR-LE', '브레이크', '무여자 작동형', '초박형', '소형', '0.62Nm'],
+    specs: {
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 0.62,
+      staticFrictionTorqueText: '0.62 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 6000,
+      maxSpeedText: '6,000 rpm',
+      outerDiameterText: '48.00 mm',
+      overallHeightText: '14.0 mm',
+      hubOptions: '세트스크루 허브 BXR-035-10LE-062-C · 압입 허브 BXR-035-10LE-062-P (각 0.120 kg)',
+      weight: 0.12,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrLeSetScrewUrl,
+    weight: 85,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-le-040',
+    model: 'BXR-040-10LE-132-C / -P',
+    series: 'BXR-LE',
+    family: 'BXR',
+    summary: '정지 마찰 토크 1.32 Nm의 초박형 무여자 작동형 브레이크입니다.',
+    features: ['정지 마찰 토크 1.32 Nm', '최고 회전속도 6,000 rpm', '외경 56.0 mm · 전고 14.5 mm · 160 g'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR-LE', '브레이크', '무여자 작동형', '초박형', '소형', '1.32Nm'],
+    specs: {
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 1.32,
+      staticFrictionTorqueText: '1.32 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 6000,
+      maxSpeedText: '6,000 rpm',
+      outerDiameterText: '56.00 mm',
+      overallHeightText: '14.5 mm',
+      hubOptions: '세트스크루 허브 BXR-040-10LE-132-C · 압입 허브 BXR-040-10LE-132-P (각 0.160 kg)',
+      weight: 0.16,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrLeSetScrewUrl,
+    weight: 86,
+  }),
+  bxrBrake({
+    id: 'mikipulley-bxr-le-050',
+    model: 'BXR-050-10LE-320-C / -P',
+    series: 'BXR-LE',
+    family: 'BXR',
+    summary: 'BXR-LE 계열 최대 용량인 정지 마찰 토크 3.20 Nm의 초박형 무여자 작동형 브레이크입니다.',
+    features: ['정지 마찰 토크 3.20 Nm (BXR-LE 최대)', '최고 회전속도 6,000 rpm', '외경 71.0 mm · 전고 19.0 mm · 400 g'],
+    tags: ['미키풀리', 'Miki Pulley', 'BXR-LE', '브레이크', '무여자 작동형', '초박형', '소형', '3.2Nm'],
+    specs: {
+      brakeAction: springAppliedAction,
+      staticFrictionTorque: 3.2,
+      staticFrictionTorqueText: '3.20 Nm',
+      torqueBasis: '정지 마찰 토크(정지 유지 기준)',
+      maxSpeed: 6000,
+      maxSpeedText: '6,000 rpm',
+      outerDiameterText: '71.00 mm',
+      overallHeightText: '19.0 mm',
+      hubOptions: '세트스크루 허브 BXR-050-10LE-320-C · 압입 허브 BXR-050-10LE-320-P (각 0.400 kg)',
+      weight: 0.4,
+      operatingTemperature: '-10–40 °C',
+    },
+    officialUrl: bxrLeSetScrewUrl,
+    weight: 87,
+  }),
+]
+
+export const mikipulleyBrakeOverviewUrl = bxrOverviewUrl
+
+export const mikipulleyBrakes: MotorProduct[] = [...bxrLeBrakes, ...bxrStandardBrakes]

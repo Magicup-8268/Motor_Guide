@@ -1,6 +1,7 @@
 import type { BrandCatalog, MotorCategory, MotorProduct } from '../types'
 import { catalogMotors } from './kincoCatalog'
 import { externalMotors } from './externalCatalog'
+import { mikipulleyBrakes } from './mikipulleyCatalog'
 
 export const brandCatalogs: BrandCatalog[] = [
   { id: 'kinco', name: 'KINCO', englishName: 'KINCO', description: '서보·로봇 모듈·스테퍼를 한 곳에서 탐색', officialUrl: 'https://www.kincoautomation.com/', accent: 'blue' },
@@ -8,6 +9,7 @@ export const brandCatalogs: BrandCatalog[] = [
   { id: 'ls-mecapion', name: 'LS메카피온', englishName: 'LS MECAPION', description: 'DD·중공형·서보 모터 제품군', officialUrl: 'https://www.lsmecapion.com/', accent: 'gold' },
   { id: 'komotek', name: '코모텍', englishName: 'KOMOTEK', description: 'AC·저전압 서보 및 맞춤 모터', officialUrl: 'http://komotek.com/ko/', accent: 'teal' },
   { id: 'fastech', name: '파스텍', englishName: 'FASTECH', description: 'Ezi-SERVO·Ezi-STEP 모터·드라이브 일체형 제품군', officialUrl: 'https://fastech-motions.com/new/kor/sub0101.php', accent: 'blue' },
+  { id: 'mikipulley', name: '미키풀리', englishName: 'MIKI PULLEY', description: 'BXR 무여자 작동형 브레이크 — 모터축 정지 유지·비상 제동용', officialUrl: 'https://www.mikipulley-us.com/', accent: 'gold' },
 ]
 
 export const categories: MotorCategory[] = [
@@ -58,6 +60,14 @@ export const categories: MotorCategory[] = [
     description: '간결한 제어 구조의 2상·3상 하이브리드 모터',
     useCase: '인덱싱 · 소형 이송 · 반복 위치 제어',
     accent: 'teal',
+  },
+  {
+    id: 'brake',
+    name: '브레이크',
+    eyebrow: 'HOLDING BRAKE',
+    description: '전원이 끊기면 스프링 힘으로 제동되는 무여자 작동형 축 브레이크',
+    useCase: '수직축 낙하 방지 · 정지 유지 · 비상 제동',
+    accent: 'gold',
   },
 ]
 
@@ -375,6 +385,6 @@ const featuredMotors: MotorProduct[] = [
 ]
 
 export const kincoMotors: MotorProduct[] = [...featuredMotors, ...catalogMotors]
-export const motors: MotorProduct[] = [...kincoMotors, ...externalMotors]
+export const motors: MotorProduct[] = [...kincoMotors, ...externalMotors, ...mikipulleyBrakes]
 
 export const sourceLabel = '제조사 공식 제품 페이지·공개 매뉴얼 기준 · 확인일 2026-07-15 (KST)'

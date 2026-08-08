@@ -203,7 +203,37 @@ function stepperCompatibility(product: MotorProduct): DriveCompatibility {
   }
 }
 
+/**
+ * 브레이크는 모터가 아니므로 드라이브를 선정하지 않는다.
+ * 대신 적용 축·전원·장착 확인 항목을 안내한다.
+ */
+function brakeApplicationGuidance(product: MotorProduct): DriveCompatibility {
+  const torque = product.specs.staticFrictionTorqueText
+    ?? (product.specs.staticFrictionTorque !== undefined ? `${product.specs.staticFrictionTorque} Nm` : '공식 사양 확인')
+  return {
+    requirement: 'external',
+    badge: '브레이크 · 드라이브 선정 대상 아님',
+    heading: '적용 축과 제동 조건을 확인하세요.',
+    description: `${product.model}은(는) 모터가 아니라 축에 장착하는 무여자 작동형 브레이크입니다. 드라이브가 아니라 브레이크 전원과 장착 축을 기준으로 선정합니다.`,
+    matches: [],
+    checks: [
+      `정지 마찰 토크 ${torque}가 적용 축의 필요 유지 토크(안전율 포함) 이상인지 확인`,
+      product.specs.boreRangeText
+        ? `장착 축 지름이 표준 축공 ${product.specs.boreRangeText} 범위에 드는지 확인`
+        : '장착 축 지름이 표준 축공 범위에 드는지 공식 자료에서 확인',
+      product.specs.ratedVoltage
+        ? `브레이크 전원 ${product.specs.ratedVoltage}와 개방·투입 회로(서지 보호 포함) 확인`
+        : '브레이크 코일 전원 사양과 개방·투입 회로를 공식 자료에서 확인',
+      product.specs.maxSpeedText
+        ? `사용 회전속도가 최고 회전속도 ${product.specs.maxSpeedText} 이하인지 확인`
+        : '사용 회전속도가 최고 회전속도 이하인지 확인',
+      '허브 방식과 장착 방향을 공식 도면에서 확인',
+    ],
+  }
+}
+
 export function driveCompatibilityFor(product: MotorProduct): DriveCompatibility {
+  if (product.categoryId === 'brake') return brakeApplicationGuidance(product)
   if (product.brand !== 'Kinco') return manufacturerDriveCompatibility(product)
   if (product.categoryId === 'integrated' || product.categoryId === 'robot-module') return integratedCompatibility(product)
   if (product.categoryId === 'ac-servo') return acServoCompatibility(product)

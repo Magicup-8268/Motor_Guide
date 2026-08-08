@@ -105,6 +105,7 @@ const selectionManufacturerOptions: Array<{ value: SelectionManufacturer; label:
   { value: 'ls-mecapion', label: 'LS메카피온' },
   { value: 'komotek', label: '코모텍' },
   { value: 'fastech', label: '파스텍 (FASTECH)' },
+  { value: 'mikipulley', label: '미키풀리 (MIKI PULLEY)' },
 ]
 
 const selectionPowerOptions = [
@@ -182,6 +183,7 @@ const manufacturerByBrandId: Record<BrandId, MotorProduct['brand']> = {
   'ls-mecapion': 'LS메카피온',
   komotek: 'KOMOTEK',
   fastech: 'FASTECH',
+  mikipulley: '미키풀리',
 }
 
 function brandIdForProduct(product: MotorProduct): BrandId {
@@ -189,11 +191,11 @@ function brandIdForProduct(product: MotorProduct): BrandId {
 }
 
 function brandUsesTorque(brandId: BrandId | 'all') {
-  return brandId === 'robotis' || brandId === 'fastech'
+  return brandId === 'robotis' || brandId === 'fastech' || brandId === 'mikipulley'
 }
 
 function torqueSelectionLabel(value: number, brandId: BrandId) {
-  const basis = brandId === 'fastech' ? '홀딩 토크' : '공개 토크'
+  const basis = brandId === 'fastech' ? '홀딩 토크' : brandId === 'mikipulley' ? '정지 마찰 토크' : '공개 토크'
   return value === 0 ? `${basis} 전체` : `${formatNumber(value)} Nm 이상 ${basis}`
 }
 
@@ -395,6 +397,10 @@ function holdingTorqueLabel(specs: MotorSpecs) {
   return metricLabel(specs.holdingTorqueText, specs.holdingTorque, 'Nm')
 }
 
+function staticFrictionTorqueLabel(specs: MotorSpecs) {
+  return metricLabel(specs.staticFrictionTorqueText, specs.staticFrictionTorque, 'Nm')
+}
+
 function ratedCurrentLabel(specs: MotorSpecs) {
   return metricLabel(specs.ratedCurrentText, specs.ratedCurrent, 'A')
 }
@@ -453,6 +459,8 @@ function comparisonSourceLabel(product: MotorProduct) {
 function specsToRows(specs: MotorSpecs) {
   const rows: Array<[string, string]> = [
     ['정격 전압', specs.ratedVoltage ?? specs.dcInputRange ?? ''],
+    ['작동 방식', specs.brakeAction ?? ''],
+    ['정지 마찰 토크', staticFrictionTorqueLabel(specs)],
     ['출력', ratedPowerLabel(specs)],
     ['정격 토크', ratedTorqueLabel(specs)],
     ['최대 토크', maxTorqueLabel(specs)],
@@ -488,12 +496,24 @@ function specsToRows(specs: MotorSpecs) {
     ['제어 모드', specs.operatingModes ?? ''],
     ['안전 기능', specs.safety ?? ''],
     ['사용 온도', specs.operatingTemperature ?? ''],
+    ['흡인 시간', specs.armaturePullInTime ?? ''],
+    ['백래시', specs.backlashText ?? ''],
+    ['총 제동 일량', specs.totalBrakingEnergy ?? ''],
+    ['코일 저항', specs.coilResistance ?? ''],
+    ['외경 (A)', specs.outerDiameterText ?? ''],
+    ['볼트 원 지름 (B)', specs.boltCircleText ?? ''],
+    ['스테이터 내경 (C)', specs.statorInnerDiameterText ?? ''],
+    ['전고 (K)', specs.overallHeightText ?? ''],
+    ['표준 축공', specs.boreRangeText ?? ''],
+    ['허브 방식', specs.hubOptions ?? ''],
   ]
   return rows.filter(([, value]) => value)
 }
 
 function capacityLabel(product: MotorProduct) {
   const { specs } = product
+  // 브레이크는 출력이 아니라 정지 마찰 토크가 대표 용량값이다.
+  if (staticFrictionTorqueLabel(specs)) return `정지 마찰 ${staticFrictionTorqueLabel(specs)}`
   const ratedPower = ratedPowerLabel(specs)
   if (ratedPower) return ratedPower
   if (holdingTorqueLabel(specs)) return `홀딩 ${holdingTorqueLabel(specs)}`
@@ -694,6 +714,7 @@ function operatingSummary(product: MotorProduct) {
     ratedTorqueLabel(specs) ? `정격 토크 ${ratedTorqueLabel(specs)}` : undefined,
     holdingTorque && !holdingTorqueIsRepeated ? `홀딩 토크 ${holdingTorque}` : undefined,
     ratedSpeedLabel(specs) ? `정격 속도 ${ratedSpeedLabel(specs)}` : undefined,
+    product.categoryId === 'brake' && maxSpeedLabel(specs) ? `최고 회전속도 ${maxSpeedLabel(specs)}` : undefined,
   ].filter(Boolean).join(' · ')
 }
 
@@ -1530,6 +1551,8 @@ export default function App() {
         ? [{ label: 'KANZ', query: 'KANZ' }, { label: '48 V', query: '48 V' }, { label: '중공축', query: '중공축' }]
         : activeBrandId === 'fastech'
           ? [{ label: 'Ezi-SERVO', query: 'Ezi-SERVO' }, { label: '12 Nm', query: '12 Nm' }, { label: 'EtherCAT', query: 'EtherCAT' }]
+          : activeBrandId === 'mikipulley'
+            ? [{ label: 'BXR', query: 'BXR' }, { label: 'BXR-LE', query: 'BXR-LE' }, { label: '무여자 작동형', query: '무여자 작동형' }]
         : [{ label: '48V 프레임리스', query: '48V 프레임리스' }, { label: '750W', query: '750W' }, { label: 'EtherCAT', query: 'EtherCAT' }]
   const comparisonProducts = comparison.map((id) => motors.find((motor) => motor.id === id)).filter((product): product is MotorProduct => Boolean(product))
   const favoriteProducts = favorites.map((id) => motors.find((motor) => motor.id === id)).filter((product): product is MotorProduct => Boolean(product))
