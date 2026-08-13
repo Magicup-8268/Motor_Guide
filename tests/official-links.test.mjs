@@ -1218,3 +1218,28 @@ test('whole-number capacity matching holds against the real catalogue', async ()
     await vite.close()
   }
 })
+
+test('pressing Enter in the search field dismisses the keyboard and jumps to the results', async () => {
+  const app = await readFile(appPath, 'utf8')
+
+  // The search box was a plain <div>, so Enter did nothing and the phone keyboard
+  // offered a newline key instead of a search key. It is a form now.
+  assert.match(app, /<form className="search-box" onSubmit=\{submitSearch\} role="search">/)
+  assert.doesNotMatch(app, /<div className="search-box">/)
+  assert.match(app, /const submitSearch = \(event: FormEvent<HTMLFormElement>\) =>/)
+  assert.match(app, /event\.preventDefault\(\)/)
+  // Enter must close the mobile keyboard and scroll the results into view.
+  assert.match(app, /searchInput\.current\?\.blur\(\)/)
+  assert.match(app, /document\.getElementById\('directory'\)\?\.scrollIntoView/)
+  assert.match(app, /<section className="directory-section" id="directory"/)
+
+  // The mobile keyboard needs to show a search key.
+  assert.match(app, /inputMode="search"/)
+  assert.match(app, /enterKeyHint="search"/)
+
+  // Inside a form the clear button must not submit.
+  assert.match(app, /<button type="button" className="clear-search"/)
+
+  // Example chips behave like a submitted search.
+  assert.match(app, /setQuery\(example\.query\); document\.getElementById\('directory'\)\?\.scrollIntoView/)
+})

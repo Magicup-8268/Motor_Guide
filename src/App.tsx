@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Icon } from './components/Icon'
 import { drawingArchivesFor, type DrawingArchive } from './data/drawings'
 import { driveCompatibilityFor, type DriveMatch } from './data/drives'
@@ -1330,6 +1330,16 @@ export default function App() {
       .filter((motor) => !modelMenuFastechSeries || motor.series === modelMenuFastechSeries)
     : []
 
+  /**
+   * 목록은 입력할 때마다 이미 걸러지지만, 엔터에도 할 일이 있다.
+   * 휴대폰에서는 엔터를 눌러도 키보드가 그대로 떠 있어 결과가 가려졌고 화면도 검색창에 머물렀다.
+   * 그래서 엔터로 키보드를 닫고 결과 목록으로 스크롤한다.
+   */
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    searchInput.current?.blur()
+    document.getElementById('directory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   // 다른 제조사로 건너갈 때는 검색어를 남겨야 한다. 그러지 않으면 "이 제조사에 6개 있음"을
   // 눌러 이동한 순간 검색어가 지워져 방금 찾던 결과가 사라진다.
   const selectBrand = (brandId: BrandId, options?: { keepQuery?: boolean }) => {
@@ -1536,13 +1546,13 @@ export default function App() {
             <p className="eyebrow"><span /> {`${activeBrand.englishName} MOTOR LIBRARY`}</p>
             <h1>모터 선정,<br /><em>이제 사양표를 넘기지 마세요.</em></h1>
             <p className="hero-description">{activeBrand.description}</p>
-            <div className="search-box">
+            <form className="search-box" onSubmit={submitSearch} role="search">
               <Icon name="search" size={22} />
-              <input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="모델명, 종류, 토크, 통신 방식 검색" aria-label={`${activeBrand.name} 모터 검색`} />
-              {query && <button className="clear-search" onClick={() => setQuery('')} aria-label="검색어 지우기"><Icon name="x" size={16} /></button>}
+              <input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="모델명, 종류, 토크, 통신 방식 검색" aria-label={`${activeBrand.name} 모터 검색`} type="text" inputMode="search" enterKeyHint="search" autoComplete="off" spellCheck={false} />
+              {query && <button type="button" className="clear-search" onClick={() => { setQuery(''); searchInput.current?.focus() }} aria-label="검색어 지우기"><Icon name="x" size={16} /></button>}
               <kbd>⌘ K</kbd>
-            </div>
-            <p className="search-note">예: {searchExamples.map((example, index) => <span key={example.query}>{index > 0 && <i>·</i>}<button onClick={() => setQuery(example.query)}>{example.label}</button></span>)}</p>
+            </form>
+            <p className="search-note">예: {searchExamples.map((example, index) => <span key={example.query}>{index > 0 && <i>·</i>}<button onClick={() => { setQuery(example.query); document.getElementById('directory')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>{example.label}</button></span>)}</p>
           </div>
         </section>
 
