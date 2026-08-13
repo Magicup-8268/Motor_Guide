@@ -16,45 +16,20 @@ const SERVER_ONLY_NOTICE = 'PC 로컬 실행(npm run dev)에서만 지원되는 
 
 const storageKeys = {
   favorites: 'motor-atlas:favorites:v1',
-  favoriteMetadata: 'motor-atlas:favorite-metadata:v1',
   drivePairings: 'motor-atlas:drive-pairings:v1',
   activeBrand: 'motor-atlas:active-brand:v1',
-  selectionPlans: 'motor-atlas:selection-plans:v1',
   recents: 'motor-atlas:recents:v1',
   theme: 'motor-atlas:theme:v1',
 }
 
 type Theme = 'dark' | 'light'
 type DetailTab = 'specs' | 'manual'
-type FavoriteStatus = 'reviewing' | 'candidate' | 'selected'
 type RobotisLineup = 'current' | 'legacy' | 'all'
-type SelectionManufacturer = 'all' | BrandId
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
-
-interface FavoriteMetadata {
-  status: FavoriteStatus
-  note: string
-}
-
-interface SelectionCriteria {
-  manufacturer: SelectionManufacturer
-  categoryId: CategoryId | 'all'
-  voltage: SelectionVoltage
-  powerFloor: number
-  protocol: SelectionProtocol
-}
-
-interface SelectionPlan extends SelectionCriteria {
-  id: string
-  name: string
-  createdAt: string
-}
-
-const defaultFavoriteMetadata: FavoriteMetadata = { status: 'reviewing', note: '' }
 
 const selectionVoltageOptions: Array<{ value: SelectionVoltage; label: string }> = [
   { value: 'all', label: '전원 전체' },
@@ -64,16 +39,6 @@ const selectionVoltageOptions: Array<{ value: SelectionVoltage; label: string }>
   { value: '48v', label: '48 V DC' },
   { value: '96v', label: '96 V DC' },
   { value: '220v', label: '220 V AC' },
-]
-
-const selectionManufacturerOptions: Array<{ value: SelectionManufacturer; label: string }> = [
-  { value: 'all', label: '전체 제조사' },
-  { value: 'kinco', label: 'KINCO' },
-  { value: 'robotis', label: '로보티즈 (DYNAMIXEL)' },
-  { value: 'ls-mecapion', label: 'LS메카피온' },
-  { value: 'komotek', label: '코모텍' },
-  { value: 'fastech', label: '파스텍 (FASTECH)' },
-  { value: 'mikipulley', label: '미키풀리 (MIKI PULLEY)' },
 ]
 
 const selectionPowerOptions = [
@@ -139,10 +104,6 @@ function compareDynamixelFamilies(left: string, right: string) {
   return (leftOrder === -1 ? Number.MAX_SAFE_INTEGER : leftOrder) - (rightOrder === -1 ? Number.MAX_SAFE_INTEGER : rightOrder) || left.localeCompare(right)
 }
 
-function isValidSelectionPower(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1_000_000
-}
-
 const selectionProtocolOptions: Array<{ value: SelectionProtocol; label: string }> = [
   { value: 'all', label: '통신 전체' },
   { value: 'ethercat', label: 'EtherCAT' },
@@ -200,21 +161,6 @@ function brandCatalogFor(id: BrandId) {
   return brandCatalogs.find((brand) => brand.id === id)!
 }
 
-function loadFavoriteMetadata() {
-  try {
-    const item = JSON.parse(window.localStorage.getItem(storageKeys.favoriteMetadata) ?? '{}')
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return {}
-    return Object.fromEntries(Object.entries(item).flatMap(([id, metadata]) => {
-      if (!metadata || typeof metadata !== 'object') return []
-      const { status, note } = metadata as Partial<FavoriteMetadata>
-      if (!['reviewing', 'candidate', 'selected'].includes(status ?? '')) return []
-      return [[id, { status: status as FavoriteStatus, note: typeof note === 'string' ? note : '' }]]
-    })) as Record<string, FavoriteMetadata>
-  } catch {
-    return {}
-  }
-}
-
 function loadDrivePairings() {
   try {
     const item = JSON.parse(window.localStorage.getItem(storageKeys.drivePairings) ?? '{}')
@@ -222,26 +168,6 @@ function loadDrivePairings() {
     return Object.fromEntries(Object.entries(item).flatMap(([productId, driveKey]) => typeof driveKey === 'string' && driveKey ? [[productId, driveKey]] : [])) as Record<string, string>
   } catch {
     return {}
-  }
-}
-
-function loadSelectionPlans() {
-  try {
-    const item = JSON.parse(window.localStorage.getItem(storageKeys.selectionPlans) ?? '[]')
-    if (!Array.isArray(item)) return []
-    return item.flatMap((plan): SelectionPlan[] => {
-      if (!plan || typeof plan !== 'object') return []
-      const candidate = plan as Partial<SelectionPlan>
-      const validCategory = candidate.categoryId === 'all' || categories.some((category) => category.id === candidate.categoryId)
-      const manufacturer = selectionManufacturerOptions.some((option) => option.value === candidate.manufacturer) ? candidate.manufacturer as SelectionManufacturer : 'all'
-      const validVoltage = selectionVoltageOptions.some((option) => option.value === candidate.voltage)
-      const validProtocol = selectionProtocolOptions.some((option) => option.value === candidate.protocol)
-      const validPower = isValidSelectionPower(candidate.powerFloor)
-      if (!validCategory || !validVoltage || !validProtocol || !validPower || typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || typeof candidate.createdAt !== 'string') return []
-      return [{ id: candidate.id, name: candidate.name, createdAt: candidate.createdAt, manufacturer, categoryId: candidate.categoryId as CategoryId | 'all', voltage: candidate.voltage as SelectionVoltage, powerFloor: candidate.powerFloor as number, protocol: candidate.protocol as SelectionProtocol }]
-    }).slice(0, 12)
-  } catch {
-    return []
   }
 }
 
@@ -340,11 +266,6 @@ function matchesQuery(products: MotorProduct[], query: string) {
     const fields = squashedFieldsOf(product)
     return terms.every((term) => fields.some((field) => field.includes(term)))
   })
-}
-
-function dayOfYear(date: Date) {
-  const start = new Date(date.getFullYear(), 0, 0)
-  return Math.floor((date.getTime() - start.getTime()) / 86_400_000)
 }
 
 function formatNumber(value: number) {
@@ -544,26 +465,6 @@ function communicationLabel(product: MotorProduct) {
   return `${product.brand} 공식 통신 사양 확인`
 }
 
-function selectionReasons(product: MotorProduct, categoryId: CategoryId | 'all', voltage: SelectionVoltage, powerFloor: number, protocol: SelectionProtocol) {
-  const reasons: string[] = []
-  if (categoryId !== 'all') reasons.push(`${categoryForProduct(product).name} 유형`)
-  if (voltage !== 'all') reasons.push(`${selectionVoltageOptions.find((item) => item.value === voltage)?.label} 전원`)
-  if (powerFloor > 0) reasons.push(product.brand === 'ROBOTIS' ? `${formatNumber(powerFloor)} Nm 이상 공개 토크` : product.brand === 'FASTECH' ? `${formatNumber(powerFloor)} Nm 이상 홀딩 토크` : `${powerFloor.toLocaleString('ko-KR')} W 이상 용량`)
-  if (protocol !== 'all') reasons.push(`${selectionProtocolOptions.find((item) => item.value === protocol)?.label} 통신`)
-  return reasons.length ? reasons : [modelFeatureLabel(product)]
-}
-
-function selectionCriteriaLabel(criteria: SelectionCriteria, brandId: BrandId = 'kinco') {
-  const criteriaBrandId = criteria.manufacturer === 'all' ? brandId : criteria.manufacturer
-  return [
-    criteria.manufacturer !== 'all' ? selectionManufacturerOptions.find((item) => item.value === criteria.manufacturer)?.label : undefined,
-    criteria.categoryId !== 'all' ? categoryForBrand(criteriaBrandId, criteria.categoryId).name : undefined,
-    criteria.voltage !== 'all' ? selectionVoltageOptions.find((item) => item.value === criteria.voltage)?.label : undefined,
-    criteria.powerFloor > 0 ? selectionCapabilityLabel(criteria.powerFloor, criteriaBrandId) : undefined,
-    criteria.protocol !== 'all' ? selectionProtocolOptions.find((item) => item.value === criteria.protocol)?.label : undefined,
-  ].filter(Boolean).join(' · ')
-}
-
 function comparisonTorqueCapacity(product: MotorProduct) {
   return product.specs.maxTorque ?? product.specs.ratedTorque ?? product.specs.holdingTorque ?? -1
 }
@@ -607,32 +508,6 @@ function comparisonConclusion(products: MotorProduct[]) {
   if (!cautions.length) cautions.push('감속기 비율, 엔코더·브레이크 옵션, 가감속 부하 조건은 같은 시리즈라도 모델 코드별로 다시 확인해야 합니다.')
 
   return { primary, primaryReason, alternative, alternativeReason, cautions }
-}
-
-function sharedSelectionUrl(criteria: SelectionCriteria, brandId: BrandId) {
-  const url = new URL(window.location.href)
-  url.hash = new URLSearchParams({
-    selection: '1',
-    brand: brandId,
-    manufacturer: criteria.manufacturer,
-    category: criteria.categoryId,
-    voltage: criteria.voltage,
-    power: String(criteria.powerFloor),
-    protocol: criteria.protocol,
-  }).toString()
-  return url.toString()
-}
-
-function sharedSelectionText(plan: SelectionPlan, url: string, brandId: BrandId) {
-  return [
-    '[Magicup-Work-Flow | 모터 선정안]',
-    plan.name,
-    `제조사 라이브러리: ${brandCatalogFor(brandId).name}`,
-    `선정 조건: ${selectionCriteriaLabel(plan, brandId)}`,
-    '',
-    `추천 결과 링크: ${url}`,
-    '공식 공개 사양을 기준으로 모델을 다시 추천합니다.',
-  ].join('\n')
 }
 
 function sharedModelUrl(product: MotorProduct) {
@@ -680,14 +555,6 @@ function clearSharedModelHash() {
   const hash = new URLSearchParams(window.location.hash.slice(1))
   if (!hash.has('model')) return
   hash.delete('model')
-  const nextHash = hash.toString()
-  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ''}`)
-}
-
-function clearSharedSelectionHash() {
-  const hash = new URLSearchParams(window.location.hash.slice(1))
-  if (!hash.has('selection')) return
-  ;['selection', 'brand', 'category', 'voltage', 'power', 'protocol'].forEach((key) => hash.delete(key))
   const nextHash = hash.toString()
   window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ''}`)
 }
@@ -1253,15 +1120,9 @@ export default function App() {
   const [familyId, setFamilyId] = useState('all')
   const [robotisLineup, setRobotisLineup] = useState<RobotisLineup>('current')
   const [powerFloor, setPowerFloor] = useState(0)
-  const [selectionManufacturer, setSelectionManufacturer] = useState<SelectionManufacturer>('all')
-  const [selectionCategoryId, setSelectionCategoryId] = useState<CategoryId | 'all'>('all')
-  const [selectionVoltage, setSelectionVoltage] = useState<SelectionVoltage>('all')
-  const [selectionPowerFloor, setSelectionPowerFloor] = useState(0)
-  const [selectionProtocol, setSelectionProtocol] = useState<SelectionProtocol>('all')
-  const [selectionPlans, setSelectionPlans] = useState<SelectionPlan[]>(() => loadSelectionPlans())
-  const [selectionPlanName, setSelectionPlanName] = useState('')
+  const [directoryVoltage, setDirectoryVoltage] = useState<SelectionVoltage>('all')
+  const [directoryProtocol, setDirectoryProtocol] = useState<SelectionProtocol>('all')
   const [favorites, setFavorites] = useState<string[]>(() => loadStringList(storageKeys.favorites))
-  const [favoriteMetadata, setFavoriteMetadata] = useState<Record<string, FavoriteMetadata>>(() => loadFavoriteMetadata())
   const [drivePairings, setDrivePairings] = useState<Record<string, string>>(() => loadDrivePairings())
   const [recents, setRecents] = useState<string[]>(() => loadStringList(storageKeys.recents))
   const [comparison, setComparison] = useState<string[]>([])
@@ -1281,9 +1142,7 @@ export default function App() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
   useEffect(() => { window.localStorage.setItem(storageKeys.favorites, JSON.stringify(favorites)) }, [favorites])
-  useEffect(() => { window.localStorage.setItem(storageKeys.favoriteMetadata, JSON.stringify(favoriteMetadata)) }, [favoriteMetadata])
   useEffect(() => { window.localStorage.setItem(storageKeys.drivePairings, JSON.stringify(drivePairings)) }, [drivePairings])
-  useEffect(() => { window.localStorage.setItem(storageKeys.selectionPlans, JSON.stringify(selectionPlans)) }, [selectionPlans])
   useEffect(() => { window.localStorage.setItem(storageKeys.recents, JSON.stringify(recents)) }, [recents])
   useEffect(() => { window.localStorage.setItem(storageKeys.activeBrand, activeBrandId) }, [activeBrandId])
   useEffect(() => { window.localStorage.setItem(storageKeys.theme, theme); document.documentElement.dataset.theme = theme }, [theme])
@@ -1331,48 +1190,21 @@ export default function App() {
 
   useEffect(() => {
     const restoreSharedState = () => {
-      const hash = new URLSearchParams(window.location.hash.slice(1))
       const sharedId = new URLSearchParams(window.location.hash.slice(1)).get('model')
-      if (sharedId) {
-        const product = motors.find((motor) => motor.id === sharedId)
-        if (!product) {
-          setNotice('공유된 모델을 찾을 수 없습니다.')
-          return
-        }
-        setRecents((current) => [product.id, ...current.filter((id) => id !== product.id)].slice(0, 10))
-        setDetailTab('specs')
-        setDetailFastechVariantId(null)
-        setActiveBrandId(brandIdForProduct(product))
-        setDetailReturnCategoryId(null)
-        setModelMenuCategoryId(null)
-        setSelected(product)
-        return
-      }
+      if (!sharedId) return
 
-      if (hash.get('selection') !== '1') return
-      const brandId = hash.get('brand')
-      const manufacturer = hash.get('manufacturer') ?? 'all'
-      const categoryId = hash.get('category')
-      const voltage = hash.get('voltage')
-      const powerFloor = Number(hash.get('power') ?? '0')
-      const protocol = hash.get('protocol')
-      const validCategory = categoryId === 'all' || categories.some((category) => category.id === categoryId)
-      const validVoltage = selectionVoltageOptions.some((option) => option.value === voltage)
-      const validPower = isValidSelectionPower(powerFloor)
-      const validProtocol = selectionProtocolOptions.some((option) => option.value === protocol)
-      const validBrand = !brandId || brandCatalogs.some((brand) => brand.id === brandId)
-      const validManufacturer = selectionManufacturerOptions.some((option) => option.value === manufacturer)
-      if (!validCategory || !validVoltage || !validPower || !validProtocol || !validBrand || !validManufacturer) {
-        setNotice('공유된 선정 조건을 불러오지 못했습니다.')
+      const product = motors.find((motor) => motor.id === sharedId)
+      if (!product) {
+        setNotice('공유된 모델을 찾을 수 없습니다.')
         return
       }
-      if (brandId) setActiveBrandId(brandId as BrandId)
-      setSelectionManufacturer(manufacturer as SelectionManufacturer)
-      setSelectionCategoryId(categoryId as CategoryId | 'all')
-      setSelectionVoltage(voltage as SelectionVoltage)
-      setSelectionPowerFloor(powerFloor)
-      setSelectionProtocol(protocol as SelectionProtocol)
-      setNotice('공유된 선정 조건을 불러왔습니다.')
+      setRecents((current) => [product.id, ...current.filter((id) => id !== product.id)].slice(0, 10))
+      setDetailTab('specs')
+      setDetailFastechVariantId(null)
+      setActiveBrandId(brandIdForProduct(product))
+      setDetailReturnCategoryId(null)
+      setModelMenuCategoryId(null)
+      setSelected(product)
     }
 
     restoreSharedState()
@@ -1386,13 +1218,6 @@ export default function App() {
     ? brandMotors
     : brandMotors.filter((product) => robotisLineup === 'legacy' ? product.lifecycle === 'legacy' : product.lifecycle !== 'legacy'), [activeBrandId, brandMotors, robotisLineup])
   const activeCategories = useMemo(() => categoriesForBrand(activeBrandId).filter((category) => catalogMotors.some((motor) => motor.categoryId === category.id)), [activeBrandId, catalogMotors])
-  const selectionCandidateMotors = useMemo(() => motors
-    .filter((product) => product.lifecycle !== 'legacy')
-    .filter((product) => selectionManufacturer === 'all' || product.brand === manufacturerByBrandId[selectionManufacturer]), [selectionManufacturer])
-  const selectionCategories = useMemo(() => {
-    const categorySource = selectionManufacturer === 'all' ? categories : categoriesForBrand(selectionManufacturer)
-    return categorySource.filter((category) => selectionCandidateMotors.some((motor) => motor.categoryId === category.id))
-  }, [selectionCandidateMotors, selectionManufacturer])
   const categoryCounts = useMemo(() => Object.fromEntries(categories.map((category) => [category.id, catalogMotors.filter((motor) => motor.categoryId === category.id).length])), [catalogMotors])
   const robotisFamilies = useMemo(() => Array.from(new Set(catalogMotors.flatMap((motor) => motor.family ? [motor.family] : []))).sort(compareDynamixelFamilies), [catalogMotors])
   const visibleMotors = useMemo(() => {
@@ -1400,77 +1225,46 @@ export default function App() {
       .filter((product) => categoryId === 'all' || product.categoryId === categoryId)
       .filter((product) => familyId === 'all' || product.family === familyId)
       .filter((product) => powerFloor === 0 || selectionCapabilityValue(product) >= powerFloor)
+      .filter((product) => supportsSelectionVoltage(product, directoryVoltage))
+      .filter((product) => supportsSelectionProtocol(product, directoryProtocol))
     return matchesQuery(narrowed, query).sort((a, b) => b.weight - a.weight)
-  }, [activeBrandId, catalogMotors, categoryId, familyId, powerFloor, query])
+  }, [activeBrandId, catalogMotors, categoryId, directoryProtocol, directoryVoltage, familyId, powerFloor, query])
   const visibleMotorGroups = useMemo(() => activeBrandId === 'robotis' && familyId === 'all'
     ? robotisFamilies.map((family) => ({ family, products: visibleMotors.filter((product) => product.family === family) })).filter((group) => group.products.length > 0)
     : [], [activeBrandId, familyId, robotisFamilies, visibleMotors])
-  const selectionActive = selectionManufacturer !== 'all' || selectionCategoryId !== 'all' || selectionVoltage !== 'all' || selectionPowerFloor > 0 || selectionProtocol !== 'all'
-  const selectionMatchResult = useMemo(() => {
-    if (!selectionActive) return { matches: [] as MotorProduct[] }
-    const matchProducts = (products: MotorProduct[]) => products
-      .filter((product) => product.lifecycle !== 'legacy')
-      .filter((product) => selectionManufacturer === 'all' || product.brand === manufacturerByBrandId[selectionManufacturer])
-      .filter((product) => selectionCategoryId === 'all' || product.categoryId === selectionCategoryId)
-      .filter((product) => supportsSelectionVoltage(product, selectionVoltage))
-      .filter((product) => selectionPowerFloor === 0 || selectionCapabilityValue(product) >= selectionPowerFloor)
-      .filter((product) => supportsSelectionProtocol(product, selectionProtocol))
-      .sort((a, b) => {
-        const powerGapA = selectionPowerFloor > 0 ? Math.max(0, selectionCapabilityValue(a) - selectionPowerFloor) : 0
-        const powerGapB = selectionPowerFloor > 0 ? Math.max(0, selectionCapabilityValue(b) - selectionPowerFloor) : 0
-        return (powerGapA - powerGapB) || (b.weight - a.weight)
-      })
-
-    // 전원·통신·용량 조건은 해당 값이 공개되지 않은 제품까지 함께 걸러낸다.
-    // 예전에는 안내가 없어 카탈로그가 조용히 줄어들었다(통신 조건은 238개 중 150개가 정보 없음).
-    const inScope = motors
-      .filter((product) => product.lifecycle !== 'legacy')
-      .filter((product) => selectionManufacturer === 'all' || product.brand === manufacturerByBrandId[selectionManufacturer])
-      .filter((product) => selectionCategoryId === 'all' || product.categoryId === selectionCategoryId)
-    const undisclosed = inScope.filter((product) => {
-      const missingVoltage = selectionVoltage !== 'all' && !supportsSelectionVoltage(product, selectionVoltage)
-        && !selectionVoltageOptions.some((option) => option.value !== 'all' && supportsSelectionVoltage(product, option.value))
-      const missingProtocol = selectionProtocol !== 'all' && !supportsSelectionProtocol(product, selectionProtocol)
-        && !selectionProtocolOptions.some((option) => option.value !== 'all' && supportsSelectionProtocol(product, option.value))
-      const missingCapacity = selectionPowerFloor > 0 && selectionCapabilityValue(product) < 0
-      return missingVoltage || missingProtocol || missingCapacity
-    }).length
-
-    return { matches: matchProducts(motors), inScope: inScope.length, undisclosed }
-  }, [selectionActive, selectionCategoryId, selectionManufacturer, selectionPowerFloor, selectionProtocol, selectionVoltage])
-  const selectionMatches = selectionMatchResult.matches
-  const selectionUndisclosed = selectionMatchResult.undisclosed ?? 0
-  const selectionResults = selectionMatches
-  const currentSelectionCriteria: SelectionCriteria = { manufacturer: selectionManufacturer, categoryId: selectionCategoryId, voltage: selectionVoltage, powerFloor: selectionPowerFloor, protocol: selectionProtocol }
+  // 전원·통신·용량 조건은 해당 값이 공개되지 않은 제품까지 함께 걸러낸다.
+  // 안내가 없으면 카탈로그가 조용히 줄어든다(통신 조건은 전체 중 절반 이상이 정보 없음).
+  const directoryUndisclosed = useMemo(() => {
+    if (directoryVoltage === 'all' && directoryProtocol === 'all' && powerFloor === 0) return 0
+    return catalogMotors
+      .filter((product) => categoryId === 'all' || product.categoryId === categoryId)
+      .filter((product) => {
+        const missingVoltage = directoryVoltage !== 'all' && !supportsSelectionVoltage(product, directoryVoltage)
+          && !selectionVoltageOptions.some((option) => option.value !== 'all' && supportsSelectionVoltage(product, option.value))
+        const missingProtocol = directoryProtocol !== 'all' && !supportsSelectionProtocol(product, directoryProtocol)
+          && !selectionProtocolOptions.some((option) => option.value !== 'all' && supportsSelectionProtocol(product, option.value))
+        const missingCapacity = powerFloor > 0 && selectionCapabilityValue(product) < 0
+        return missingVoltage || missingProtocol || missingCapacity
+      }).length
+  }, [catalogMotors, categoryId, directoryProtocol, directoryVoltage, powerFloor])
   const directoryPowerChoices = useMemo(() => {
     const options = brandUsesTorque(activeBrandId) ? torqueOptionsFor(catalogMotors, activeBrandId) : powerOptionsFor(catalogMotors)
     return options.some((option) => option.value === powerFloor)
       ? options
       : [...options, { value: powerFloor, label: `${selectionCapabilityLabel(powerFloor, activeBrandId)} (현재)` }]
   }, [activeBrandId, catalogMotors, powerFloor])
-  const selectionPowerChoices = useMemo(() => {
-    if (selectionManufacturer === 'all') return [{ value: 0, label: '제조사 선택 후 설정' }]
-    const options = brandUsesTorque(selectionManufacturer) ? torqueOptionsFor(selectionCandidateMotors, selectionManufacturer) : powerOptionsFor(selectionCandidateMotors)
-    return options.some((option) => option.value === selectionPowerFloor)
-      ? options
-      : [...options, { value: selectionPowerFloor, label: `${selectionCapabilityLabel(selectionPowerFloor, selectionManufacturer)} (현재 조건)` }]
-  }, [selectionCandidateMotors, selectionManufacturer, selectionPowerFloor])
   // 전원·통신 목록은 고정 목록이라 제조사를 좁히면 결과가 0건인 항목이 그대로 남았다.
   // (예: LS메카피온은 48 V만, 미키풀리는 24 V만 존재하고 통신은 아예 없다)
   // 실제로 결과가 있는 항목만 남기고, 현재 고른 값은 항상 유지한다.
-  const selectionVoltageChoices = useMemo(() => selectionVoltageOptions.filter((option) => option.value === 'all'
-    || option.value === selectionVoltage
-    || selectionCandidateMotors.some((product) => supportsSelectionVoltage(product, option.value))),
-  [selectionCandidateMotors, selectionVoltage])
-  const selectionProtocolChoices = useMemo(() => selectionProtocolOptions.filter((option) => option.value === 'all'
-    || option.value === selectionProtocol
-    || selectionCandidateMotors.some((product) => supportsSelectionProtocol(product, option.value))),
-  [selectionCandidateMotors, selectionProtocol])
+  const directoryVoltageChoices = useMemo(() => selectionVoltageOptions.filter((option) => option.value === 'all'
+    || option.value === directoryVoltage
+    || catalogMotors.some((product) => supportsSelectionVoltage(product, option.value))),
+  [catalogMotors, directoryVoltage])
+  const directoryProtocolChoices = useMemo(() => selectionProtocolOptions.filter((option) => option.value === 'all'
+    || option.value === directoryProtocol
+    || catalogMotors.some((product) => supportsSelectionProtocol(product, option.value))),
+  [catalogMotors, directoryProtocol])
 
-  useEffect(() => {
-    if (selectionManufacturer === 'all' && selectionPowerFloor !== 0) setSelectionPowerFloor(0)
-  }, [selectionManufacturer, selectionPowerFloor])
-  const recommendation = catalogMotors[dayOfYear(new Date()) % catalogMotors.length] ?? motors[0]
   const searchExamples = activeBrandId === 'robotis'
     ? [{ label: 'XM430', query: 'XM430' }, { label: '4.1 Nm', query: '4.1 Nm' }, { label: 'RS-485', query: 'RS-485' }]
     : activeBrandId === 'ls-mecapion'
@@ -1493,7 +1287,6 @@ export default function App() {
     : []
 
   const selectBrand = (brandId: BrandId) => {
-    clearSharedSelectionHash()
     setActiveBrandId(brandId)
     setCategoryId('all')
     setFamilyId('all')
@@ -1501,8 +1294,8 @@ export default function App() {
     setModelMenuCategoryId(null)
     setModelMenuFastechSeries(null)
     setPowerFloor(0)
-    if (brandUsesTorque(brandId) !== brandUsesTorque(activeBrandId)) setSelectionPowerFloor(0)
-    setSelectionCategoryId('all')
+    setDirectoryVoltage('all')
+    setDirectoryProtocol('all')
     setQuery('')
   }
 
@@ -1605,17 +1398,9 @@ export default function App() {
     drawingUrl.searchParams.set('id', drawing.id)
     window.open(drawingUrl.toString(), '_blank', 'noopener,noreferrer')
   }
-  const updateFavoriteMetadata = (id: string, patch: Partial<FavoriteMetadata>) => {
-    setFavoriteMetadata((current) => ({ ...current, [id]: { ...(current[id] ?? defaultFavoriteMetadata), ...patch } }))
-  }
   const toggleFavorite = (id: string) => {
     if (favorites.includes(id)) {
       setFavorites((current) => current.filter((item) => item !== id))
-      setFavoriteMetadata((current) => {
-        const next = { ...current }
-        delete next[id]
-        return next
-      })
       return
     }
     setFavorites((current) => [id, ...current])
@@ -1631,56 +1416,6 @@ export default function App() {
       return [...current, id]
     })
   }
-  const resetSelection = () => {
-    clearSharedSelectionHash()
-    setSelectionManufacturer('all')
-    setSelectionCategoryId('all')
-    setSelectionVoltage('all')
-    setSelectionPowerFloor(0)
-    setSelectionProtocol('all')
-    setSelectionPlanName('')
-  }
-  const applySelectionPlan = (plan: SelectionPlan) => {
-    clearSharedSelectionHash()
-    setSelectionManufacturer(plan.manufacturer)
-    setSelectionCategoryId(plan.categoryId)
-    setSelectionVoltage(plan.voltage)
-    setSelectionPowerFloor(plan.powerFloor)
-    setSelectionProtocol(plan.protocol)
-    setNotice(`'${plan.name}' 선정안을 불러왔습니다.`)
-  }
-  const saveSelectionPlan = () => {
-    if (!selectionActive) return
-    const plan: SelectionPlan = {
-      id: globalThis.crypto?.randomUUID?.() ?? `selection-plan-${Date.now()}`,
-      name: selectionPlanName.trim() || selectionCriteriaLabel(currentSelectionCriteria, activeBrandId) || '새 선정안',
-      ...currentSelectionCriteria,
-      createdAt: new Date().toISOString(),
-    }
-    setSelectionPlans((current) => [plan, ...current].slice(0, 12))
-    setSelectionPlanName('')
-    setNotice(`'${plan.name}' 선정안을 저장했습니다.`)
-  }
-  const shareSelectionPlan = async (plan: SelectionPlan) => {
-    const url = sharedSelectionUrl(plan, activeBrandId)
-    const text = sharedSelectionText(plan, url, activeBrandId)
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ title: `${plan.name} | Magicup-Work-Flow`, text, url })
-        setNotice('선정안을 공유했습니다.')
-        return
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-      }
-    }
-    try {
-      await copyText(text)
-      setNotice('선정안 공유 링크를 복사했습니다.')
-    } catch {
-      setNotice('선정안 공유 링크를 복사하지 못했습니다. 다시 시도해 주세요.')
-    }
-  }
-
   const downloadComparison = async (products: MotorProduct[]) => {
     if (!ensureServerApiAvailable()) return
     setComparisonDownloadPending(true)
@@ -1763,65 +1498,6 @@ export default function App() {
             </div>
             <p className="search-note">예: {searchExamples.map((example, index) => <span key={example.query}>{index > 0 && <i>·</i>}<button onClick={() => setQuery(example.query)}>{example.label}</button></span>)}</p>
           </div>
-          <aside className="recommendation-card">
-            <div className="recommendation-top"><span className="today-mark"><Icon name="spark" size={16} /> 오늘의 탐색</span><span>{recommendation.series}</span></div>
-            <div className="recommendation-device"><i /><b /><span /><span /><span /></div>
-            <p>하루 동안 바뀌지 않는 추천</p>
-            <h2>{recommendation.model}</h2>
-            <p className="recommendation-summary">{recommendation.summary}</p>
-            <button className="text-link" onClick={() => openDetail(recommendation)}>사양 먼저 보기 <Icon name="arrow-up-right" size={17} /></button>
-          </aside>
-        </section>
-
-        <section className="selection-assistant" aria-labelledby="selection-assistant-title">
-          <div className="selection-assistant-head">
-            <div>
-              <p className="section-eyebrow">SMART SELECT</p>
-              <h2 id="selection-assistant-title">조건에 맞는 모델을 바로 추천받으세요.</h2>
-              <p>전원·용량·통신·유형 조건을 조합하면 전체 제조사의 공식 공개 사양을 기준으로 일치 모델을 모두 보여줍니다.</p>
-            </div>
-            {selectionActive && <button className="text-button selection-reset" onClick={resetSelection}><Icon name="x" size={15} /> 조건 초기화</button>}
-          </div>
-          <div className="selection-controls" aria-label="빠른 모델 선정 조건">
-            <label className="selection-control"><span>제조사</span><select value={selectionManufacturer} onChange={(event) => { clearSharedSelectionHash(); setSelectionManufacturer(event.target.value as SelectionManufacturer); setSelectionCategoryId('all'); setSelectionPowerFloor(0) }}>{selectionManufacturerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
-            <label className="selection-control"><span>모터 유형</span><select value={selectionCategoryId} onChange={(event) => { clearSharedSelectionHash(); setSelectionCategoryId(event.target.value as CategoryId | 'all') }}><option value="all">유형 전체</option>{selectionCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Icon name="chevron-down" size={15} /></label>
-            <label className="selection-control"><span>전원</span><select value={selectionVoltage} onChange={(event) => { clearSharedSelectionHash(); setSelectionVoltage(event.target.value as SelectionVoltage) }}>{selectionVoltageChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
-            <label className="selection-control"><span>{selectionManufacturer === 'robotis' ? '최소 공개 토크' : selectionManufacturer === 'fastech' ? '최소 홀딩 토크' : selectionManufacturer === 'all' ? '용량 · 토크 기준' : '최소 용량'}</span><select value={selectionPowerFloor} disabled={selectionManufacturer === 'all'} onChange={(event) => { clearSharedSelectionHash(); setSelectionPowerFloor(Number(event.target.value)) }}>{selectionPowerChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
-            <label className="selection-control"><span>통신 방식</span><select value={selectionProtocol} onChange={(event) => { clearSharedSelectionHash(); setSelectionProtocol(event.target.value as SelectionProtocol) }}>{selectionProtocolChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
-          </div>
-          {selectionManufacturer === 'robotis' && <p className="selection-basis-note">DYNAMIXEL 토크는 제품군별로 스톨·연속·최대 기준이 다릅니다. 추천 결과의 <b>토크 기준</b>을 확인하고, 서로 다른 기준의 수치는 직접 비교하지 마세요.</p>}
-          {selectionManufacturer === 'fastech' && <p className="selection-basis-note">파스텍의 제품군 토크는 <b>홀딩 토크(정지 유지 기준)</b>입니다. 실제 운전 토크는 속도·전원·구동 조건에 따라 달라지므로 공식 토크 곡선과 매뉴얼을 함께 확인하세요.</p>}
-          {selectionActive && <div className="selection-plan-save">
-            <label><span>선정안 이름</span><input value={selectionPlanName} onChange={(event) => setSelectionPlanName(event.target.value)} maxLength={48} placeholder={selectionCriteriaLabel(currentSelectionCriteria, activeBrandId)} /></label>
-            <button className="button secondary" onClick={saveSelectionPlan}><Icon name="bookmark" size={16} /> 선정안 저장</button>
-            <small>이 기기에만 저장됩니다.</small>
-          </div>}
-          {!selectionActive ? <div className="selection-placeholder"><Icon name="sliders" size={20} /><span>필요한 조건 한 가지만 선택해도 추천을 시작합니다.</span></div> : selectionResults.length > 0 ? <div className="selection-results">
-            <div className="selection-result-head"><strong>{selectionManufacturer === 'all' ? '전체 제조사' : `${selectionManufacturerOptions.find((item) => item.value === selectionManufacturer)?.label}`} 조건 일치 <em>{selectionMatches.length}</em>개 모델</strong><span>{selectionManufacturer === 'robotis' ? '제품별 토크 기준을 확인해 같은 기준끼리 비교하세요.' : selectionManufacturer === 'fastech' ? '파스텍 결과는 제품군별 공개 홀딩 토크 기준입니다. 실제 운전 토크 곡선을 함께 확인하세요.' : '용량 조건 선택 시 요구 용량에 가까운 순으로 정렬합니다.'}{selectionUndisclosed > 0 ? ` 선택한 조건의 공개 수치가 없는 ${selectionUndisclosed}개 모델은 결과에서 빠졌습니다.` : ''}</span></div>
-            <div className="selection-result-grid">
-              {selectionResults.map((product, index) => <article className="selection-result-card" key={product.id}>
-                <span className="selection-rank">0{index + 1}</span>
-                <div className="selection-card-meta">
-                  <span className="selection-manufacturer">제조사 · {product.brand}</span>
-                  <span className="selection-family">{categoryForProduct(product).name} · {product.series}</span>
-                </div>
-                <strong>{product.model}</strong>
-                <div className="selection-match-area" role="button" tabIndex={0} aria-label={`${product.model} 필터 일치 사양 상세 보기`} onClick={() => openCatalogItem(product)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openCatalogItem(product) } }}>
-                  <small>{modelPowerLabel(product) || '공식 제품 페이지에서 세부 사양 확인'}</small>
-                  <ul>{[...selectionReasons(product, selectionCategoryId, selectionVoltage, selectionPowerFloor, selectionProtocol), ...((product.brand === 'ROBOTIS' || product.brand === 'FASTECH') && product.specs.torqueBasis ? [`토크 기준: ${product.specs.torqueBasis}`] : [])].map((reason) => <li key={reason}><Icon name="check" size={14} />{reason}</li>)}</ul>
-                  <span className="selection-match-open">필터 일치 사양 상세 보기 <Icon name="arrow-up-right" size={16} /></span>
-                </div>
-              </article>)}
-            </div>
-          </div> : <div className="selection-empty"><Icon name="search" size={21} /><strong>현재 조건에 모두 맞는 공식 등록 모델이 없습니다.</strong><button className="text-button" onClick={resetSelection}>조건 다시 설정</button></div>}
-          {selectionPlans.length > 0 && <section className="selection-plan-list" aria-label="저장한 선정안">
-            <div><p>저장한 선정안 <span>{selectionPlans.length}</span></p><small>저장된 조건을 다시 열거나 링크로 공유할 수 있습니다.</small></div>
-            <ul>{selectionPlans.map((plan) => <li key={plan.id}>
-              <button className="selection-plan-open" onClick={() => applySelectionPlan(plan)}><strong>{plan.name}</strong><span>{selectionCriteriaLabel(plan, activeBrandId)}</span></button>
-              <button className="icon-button selection-plan-share" onClick={() => shareSelectionPlan(plan)} aria-label={`${plan.name} 선정안 공유`}><Icon name="share" size={16} /></button>
-              <button className="icon-button selection-plan-remove" onClick={() => setSelectionPlans((current) => current.filter((item) => item.id !== plan.id))} aria-label={`${plan.name} 선정안 삭제`}><Icon name="x" size={16} /></button>
-            </li>)}</ul>
-          </section>}
         </section>
 
         <section className="summary-grid" aria-label="카탈로그 현황">
@@ -1846,7 +1522,7 @@ export default function App() {
         <section className="directory-section" id="directory" aria-labelledby="directory-title">
           <div className="directory-head">
             <div><p className="section-eyebrow">PRODUCT DIRECTORY</p><h2 id="directory-title">사양으로 비교할 모델 찾기</h2></div>
-            <p><strong>{visibleMotors.length}</strong>개 모델이 현재 조건에 맞습니다.</p>
+            <p><strong>{visibleMotors.length}</strong>개 모델이 현재 조건에 맞습니다.{directoryUndisclosed > 0 ? ` 선택한 조건의 공개 수치가 없는 ${directoryUndisclosed}개 모델은 결과에서 빠졌습니다.` : ''}</p>
           </div>
           <div className="filter-row" aria-label="모델 필터">
             <div className="filter-label"><Icon name="sliders" size={18} /> 필터</div>
@@ -1858,6 +1534,20 @@ export default function App() {
               <label htmlFor="power-select">{activeBrandId === 'robotis' ? '최소 공개 토크' : activeBrandId === 'fastech' ? '최소 홀딩 토크' : '최소 출력'}</label>
               <select id="power-select" value={powerFloor} onChange={(event) => setPowerFloor(Number(event.target.value))}>
                 {directoryPowerChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <Icon name="chevron-down" size={15} />
+            </div>
+            <div className="power-filter">
+              <label htmlFor="voltage-select">전원</label>
+              <select id="voltage-select" value={directoryVoltage} onChange={(event) => setDirectoryVoltage(event.target.value as SelectionVoltage)}>
+                {directoryVoltageChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <Icon name="chevron-down" size={15} />
+            </div>
+            <div className="power-filter">
+              <label htmlFor="protocol-select">통신 방식</label>
+              <select id="protocol-select" value={directoryProtocol} onChange={(event) => setDirectoryProtocol(event.target.value as SelectionProtocol)}>
+                {directoryProtocolChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
               <Icon name="chevron-down" size={15} />
             </div>
@@ -1892,25 +1582,20 @@ export default function App() {
             </section>)}
           </div> : <div className="motor-grid">
             {visibleMotors.map((product) => <ProductCard key={product.id} product={product} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}
-            {visibleMotors.length === 0 && <div className="empty-state"><Icon name="search" size={28} /><h3>조건에 맞는 모델이 없습니다.</h3><p>모델명 일부나 더 넓은 조건으로 다시 검색해보세요.</p><button className="text-button" onClick={() => { setQuery(''); setCategoryId('all'); setFamilyId('all'); setRobotisLineup('current'); setPowerFloor(0) }}>필터 초기화</button></div>}
+            {visibleMotors.length === 0 && <div className="empty-state"><Icon name="search" size={28} /><h3>조건에 맞는 모델이 없습니다.</h3><p>모델명 일부나 더 넓은 조건으로 다시 검색해보세요.</p><button className="text-button" onClick={() => { setQuery(''); setCategoryId('all'); setFamilyId('all'); setRobotisLineup('current'); setPowerFloor(0); setDirectoryVoltage('all'); setDirectoryProtocol('all') }}>필터 초기화</button></div>}
           </div>}
         </section>
 
         {favoriteProducts.length > 0 && <section className="favorites-section" aria-labelledby="favorites-title">
           <div className="section-heading">
             <div><p className="section-eyebrow">SAVED MODELS</p><h2 id="favorites-title">관심 모델</h2></div>
-            <div className="favorites-heading-actions"><span><strong>{favoriteProducts.length}</strong>개 보관 중</span><button className="text-button" onClick={() => { setFavorites([]); setFavoriteMetadata({}) }}>모두 비우기</button></div>
+            <div className="favorites-heading-actions"><span><strong>{favoriteProducts.length}</strong>개 보관 중</span><button className="text-button" onClick={() => setFavorites([])}>모두 비우기</button></div>
           </div>
           <div className="favorite-list">
             {favoriteProducts.map((product) => <article key={product.id} className="favorite-card">
               <button className="favorite-main" onClick={() => openDetail(product)}>
                 <span>{categoryForProduct(product).name}</span><strong>{product.model}</strong><small>{modelPowerLabel(product) || '공식 제품 페이지에서 사양 확인'}</small>
               </button>
-              <div className="favorite-project">
-                <label className="favorite-status-field"><span>프로젝트 상태</span><select value={(favoriteMetadata[product.id] ?? defaultFavoriteMetadata).status} onChange={(event) => updateFavoriteMetadata(product.id, { status: event.target.value as FavoriteStatus })} aria-label={`${product.model} 프로젝트 상태`}><option value="reviewing">검토 중</option><option value="candidate">후보</option><option value="selected">선정</option></select></label>
-                <label className="favorite-note-field"><span>프로젝트 메모</span><input value={(favoriteMetadata[product.id] ?? defaultFavoriteMetadata).note} onChange={(event) => updateFavoriteMetadata(product.id, { note: event.target.value })} maxLength={80} placeholder="예: 고객사 A 견적 · EtherCAT 필수" aria-label={`${product.model} 프로젝트 메모`} /></label>
-                <small className="favorite-save-note">이 기기에 자동 저장</small>
-              </div>
               <div className="favorite-actions">
                 <button className={`favorite-compare ${comparison.includes(product.id) ? 'is-selected' : ''}`} onClick={() => toggleCompare(product.id)}><Icon name={comparison.includes(product.id) ? 'check' : 'grid'} size={15} />{comparison.includes(product.id) ? '비교함에 담김' : '비교하기'}</button>
                 <button className="favorite-remove" aria-label={`${product.model} 관심 모델에서 제거`} onClick={() => toggleFavorite(product.id)}><Icon name="bookmark" size={16} fill="currentColor" />관심 해제</button>

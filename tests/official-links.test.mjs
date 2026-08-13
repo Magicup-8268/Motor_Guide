@@ -311,7 +311,6 @@ test('power filtering expands beyond 1 kW for published LS Mecapion and KOMOTEK 
   assert.match(app, /const extendedPowerFloors = \[100, 400, 750, 1000, 3000, 7500, 15000, 40000, 100000, 800000\]/)
   assert.match(app, /function powerOptionsFor/)
   assert.match(app, /const directoryPowerChoices/)
-  assert.match(app, /value <= 1_000_000/)
 })
 
 test('DYNAMIXEL X catalog retains official voltage, stall torque, no-load speed, and bus distinctions', async () => {
@@ -337,7 +336,6 @@ test('DYNAMIXEL X catalog retains official voltage, stall torque, no-load speed,
   assert.match(app, /\{ value: '5v', label: '5 V DC' \}/)
   assert.match(app, /\{ value: '12v', label: '12 V DC' \}/)
   assert.match(app, /const torqueOptions/)
-  assert.match(app, /selectionManufacturer === 'robotis' \? '최소 공개 토크'/)
   assert.match(app, /query: 'XM430'/)
   assert.match(app, /selectionCapabilityValue\(product\)/)
 })
@@ -495,24 +493,6 @@ test('saved favorites have a dedicated reusable model area', async () => {
   assert.match(app, /SAVED MODELS/)
   assert.match(app, /className=\{`favorite-compare/)
   assert.match(styles, /\.favorite-list \{ display: grid;/)
-})
-
-test('saved favorites retain a local project status and memo', async () => {
-  const [app, styles] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
-  ])
-
-  assert.match(app, /favoriteMetadata: 'motor-atlas:favorite-metadata:v1'/)
-  assert.match(app, /function loadFavoriteMetadata/)
-  assert.match(app, /const \[favoriteMetadata, setFavoriteMetadata\]/)
-  assert.match(app, /const updateFavoriteMetadata/)
-  assert.match(app, /className="favorite-project"/)
-  assert.match(app, /<option value="reviewing">검토 중<\/option>/)
-  assert.match(app, /<option value="candidate">후보<\/option>/)
-  assert.match(app, /<option value="selected">선정<\/option>/)
-  assert.match(app, /maxLength=\{80\}/)
-  assert.match(styles, /\.favorite-project \{ display: grid;/)
 })
 
 test('Kinco catalog uses current product-menu paths instead of retired numeric links', async () => {
@@ -728,41 +708,22 @@ test('drawing ZIP coverage includes every catalog family with an official Kinco 
   assert.match(drawings, /archive\.modelPrefixes \|\| archive\.modelPrefixes\.some/)
 })
 
-test('condition-based selection shows every matching current motor across manufacturers with matching reasons', async () => {
-  const [app, styles] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
-  ])
+test('directory filters cover voltage and communication without a second filter system', async () => {
+  const app = await readFile(appPath, 'utf8')
 
-  assert.match(app, /const \[selectionCategoryId, setSelectionCategoryId\] = useState<CategoryId \| 'all'>\('all'\)/)
-  assert.match(app, /const \[selectionManufacturer, setSelectionManufacturer\] = useState<SelectionManufacturer>\('all'\)/)
-  assert.match(app, /const selectionManufacturerOptions/)
-  assert.match(app, /const \[selectionVoltage, setSelectionVoltage\] = useState<SelectionVoltage>\('all'\)/)
-  assert.match(app, /const selectionMatchResult = useMemo/)
-  assert.match(app, /return \{ matches: matchProducts\(motors\), inScope: inScope\.length, undisclosed \}/)
-  // 조건에 해당하는 공개 수치가 없어 빠진 모델 수를 결과 머리말에 알려야 한다.
-  assert.match(app, /const selectionUndisclosed = selectionMatchResult\.undisclosed \?\? 0/)
-  assert.match(app, /선택한 조건의 공개 수치가 없는 \$\{selectionUndisclosed\}개 모델은 결과에서 빠졌습니다/)
-  // 화면은 조건 일치 모델 전체를 보여준다. 상위 3개만 추리던 동작은 PDF 보고서와 함께 제거되었다.
-  assert.match(app, /const selectionResults = selectionMatches/)
-  assert.doesNotMatch(app, /selectionMatches\.slice\(0, 3\)/)
-  assert.match(app, /filter\(\(product\) => product\.lifecycle !== 'legacy'\)/)
-  assert.match(app, /selectionManufacturer === 'all'/)
-  assert.match(app, /product\.brand === manufacturerByBrandId\[selectionManufacturer\]/)
-  assert.match(app, /const selectionMatches = selectionMatchResult\.matches/)
-  assert.match(app, /supportsSelectionVoltage\(product, selectionVoltage\)/)
-  assert.match(app, /supportsSelectionProtocol\(product, selectionProtocol\)/)
-  assert.match(app, /const selectionResults = selectionMatches/)
-  assert.match(app, /function selectionReasons/)
-  assert.match(app, /className="selection-assistant"/)
-  assert.match(app, /className="selection-result-grid"/)
-  assert.match(app, /className="selection-match-area" role="button" tabIndex=\{0\}/)
-  assert.match(app, /aria-label=\{`\$\{product\.model\} 필터 일치 사양 상세 보기`\}/)
-  assert.match(app, /onClick=\{\(\) => openDetail\(product\)\}/)
-  assert.match(styles, /\.selection-assistant \{/) 
-  assert.match(styles, /\.selection-result-grid \{/) 
-  assert.match(styles, /\.selection-controls \{[^}]*repeat\(5, minmax\(0, 1fr\)\)/)
-  assert.match(styles, /\.selection-match-area:hover, \.selection-match-area:focus-visible/)
+  // 전원·통신 조건은 카탈로그 필터 한 곳에서만 관리한다.
+  assert.match(app, /const \[directoryVoltage, setDirectoryVoltage\] = useState<SelectionVoltage>\('all'\)/)
+  assert.match(app, /const \[directoryProtocol, setDirectoryProtocol\] = useState<SelectionProtocol>\('all'\)/)
+  assert.match(app, /supportsSelectionVoltage\(product, directoryVoltage\)/)
+  assert.match(app, /supportsSelectionProtocol\(product, directoryProtocol\)/)
+  assert.match(app, /const directoryVoltageChoices = useMemo/)
+  assert.match(app, /const directoryProtocolChoices = useMemo/)
+  assert.match(app, /\{directoryVoltageChoices\.map/)
+  assert.match(app, /\{directoryProtocolChoices\.map/)
+  // 조건에 해당하는 공개 수치가 없어 빠진 모델 수를 결과 수 옆에 알려야 한다.
+  assert.match(app, /선택한 조건의 공개 수치가 없는 \$\{directoryUndisclosed\}개 모델은 결과에서 빠졌습니다/)
+  assert.doesNotMatch(app, /selection-assistant/)
+  assert.doesNotMatch(app, /const selectionManufacturerOptions/)
 })
 
 test('selection filters validate every registered model against normalized published voltage and communication data', async () => {
@@ -837,26 +798,6 @@ test('selection filters validate every registered model against normalized publi
   } finally {
     await vite.close()
   }
-})
-
-test('selection conditions can be saved locally, restored, and shared as a portable link', async () => {
-  const [app, styles] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
-  ])
-
-  assert.match(app, /selectionPlans: 'motor-atlas:selection-plans:v1'/)
-  assert.match(app, /function loadSelectionPlans/)
-  assert.match(app, /function sharedSelectionUrl/)
-  assert.match(app, /selection: '1'/)
-  assert.match(app, /function clearSharedSelectionHash/)
-  assert.match(app, /const saveSelectionPlan = \(\) =>/)
-  assert.match(app, /const applySelectionPlan = \(plan: SelectionPlan\) =>/)
-  assert.match(app, /const shareSelectionPlan = async \(plan: SelectionPlan\) =>/)
-  assert.match(app, /className="selection-plan-save"/)
-  assert.match(app, /className="selection-plan-list"/)
-  assert.match(styles, /\.selection-plan-save \{/)
-  assert.match(styles, /\.selection-plan-list ul \{/) 
 })
 
 test('comparison provides an evidence-bound primary option, alternative, and caution summary', async () => {
@@ -1118,7 +1059,6 @@ test('Miki Pulley BXR spring-applied brakes are registered as brakes, not motors
     assert.match(app, /const extendedTorqueFloors = \[0\.05, 0\.1, 0\.2, 0\.5, 1, 3, 5, 9, 15, 30, 60\]/)
     assert.match(app, /function torqueOptionsFor/)
     assert.match(app, /torqueOptionsFor\(catalogMotors, activeBrandId\)/)
-    assert.match(app, /torqueOptionsFor\(selectionCandidateMotors, selectionManufacturer\)/)
 
     const torques = brakes.map((product) => product.specs.staticFrictionTorque)
     const smallest = Math.min(...torques)
@@ -1191,10 +1131,10 @@ test('search keeps numeric queries precise and every capacity floor returns resu
     }
 
     // Voltage and protocol dropdowns are narrowed to options that actually match.
-    assert.match(app, /const selectionVoltageChoices = useMemo/)
-    assert.match(app, /const selectionProtocolChoices = useMemo/)
-    assert.match(app, /\{selectionVoltageChoices\.map/)
-    assert.match(app, /\{selectionProtocolChoices\.map/)
+    assert.match(app, /const directoryVoltageChoices = useMemo/)
+    assert.match(app, /const directoryProtocolChoices = useMemo/)
+    assert.match(app, /\{directoryVoltageChoices\.map/)
+    assert.match(app, /\{directoryProtocolChoices\.map/)
 
     // KOMOTEK and 미키풀리 publish no communication data, so no protocol option may survive for them.
     for (const manufacturer of ['KOMOTEK', '미키풀리']) {
