@@ -774,7 +774,10 @@ test('condition-based selection shows every matching current motor across manufa
   assert.match(app, /const selectionManufacturerOptions/)
   assert.match(app, /const \[selectionVoltage, setSelectionVoltage\] = useState<SelectionVoltage>\('all'\)/)
   assert.match(app, /const selectionMatchResult = useMemo/)
-  assert.match(app, /return \{ matches: matchProducts\(motors\) \}/)
+  assert.match(app, /return \{ matches: matchProducts\(motors\), inScope: inScope\.length, undisclosed \}/)
+  // 조건에 해당하는 공개 수치가 없어 빠진 모델 수를 결과 머리말에 알려야 한다.
+  assert.match(app, /const selectionUndisclosed = selectionMatchResult\.undisclosed \?\? 0/)
+  assert.match(app, /선택한 조건의 공개 수치가 없는 \$\{selectionUndisclosed\}개 모델은 결과에서 빠졌습니다/)
   assert.match(app, /filter\(\(product\) => product\.lifecycle !== 'legacy'\)/)
   assert.match(app, /selectionManufacturer === 'all'/)
   assert.match(app, /product\.brand === manufacturerByBrandId\[selectionManufacturer\]/)
@@ -1230,6 +1233,79 @@ test('Miki Pulley BXR spring-applied brakes are registered as brakes, not motors
 
     // Brakes label their supply the way the manufacturer sheet does.
     assert.match(app, /specs\.brakeAction \? '코일 전압' : '정격 전압'/)
+  } finally {
+    await vite.close()
+  }
+})
+
+test('search keeps numeric queries precise and every capacity floor returns results', async () => {
+  const vite = await createServer({
+    root: process.cwd(),
+    appType: 'custom',
+    server: { middlewareMode: true },
+  })
+
+  try {
+    const [{ motors }, filters, app] = await Promise.all([
+      vite.ssrLoadModule('/src/data/motors.ts'),
+      vite.ssrLoadModule('/src/utils/selectionFilters.ts'),
+      readFile(appPath, 'utf8'),
+    ])
+
+    // Search matches per field. Concatenating every field into one string made "12 Nm" match
+    // 12-bit, 12.5 A and 125 W — 77 hits where only 4 products actually published 12 Nm.
+    assert.match(app, /function searchFields/)
+    assert.match(app, /function matchesQuery/)
+    assert.match(app, /const phraseMatches = products\.filter/)
+    assert.doesNotMatch(app, /function toSearchText/)
+    // Numeric-only torque is now searchable, so an exact torque query can work at all.
+    for (const field of ['ratedTorque', 'maxTorque', 'holdingTorque', 'staticFrictionTorque']) {
+      assert.ok(app.includes(`specs.${field} !== undefined ? \``), `${field}가 검색 대상에 있어야 합니다.`)
+    }
+
+    // Every offered capacity floor must return at least one product, for every brand.
+    const brandByManufacturer = {
+      Kinco: 'kinco', ROBOTIS: 'robotis', 'LS메카피온': 'ls-mecapion',
+      KOMOTEK: 'komotek', FASTECH: 'fastech', '미키풀리': 'mikipulley',
+    }
+    const torqueFloors = [0.05, 0.1, 0.2, 0.5, 1, 3, 5, 9, 15, 30, 60]
+    for (const [manufacturer, brandId] of Object.entries(brandByManufacturer)) {
+      const products = motors.filter((product) => product.brand === manufacturer && product.lifecycle !== 'legacy')
+      if (!products.length) continue
+      const published = products.map(filters.selectionCapabilityValue).filter((value) => value > 0)
+      if (!published.length) continue
+      const usesTorque = filters.selectionCapabilityUnit(products[0]) === 'torque'
+      if (!usesTorque) continue
+      const smallest = Math.min(...published)
+      const largest = Math.max(...published)
+      const offered = torqueFloors.filter((value) => value > smallest && value <= largest)
+      for (const floor of offered) {
+        const hits = products.filter((product) => filters.selectionCapabilityValue(product) >= floor).length
+        assert.ok(hits > 0, `${brandId}의 ${floor} Nm 하한은 결과가 있어야 합니다.`)
+      }
+      // FASTECH tops out at 12 Nm, so 15/30/60 must not be offered any more.
+      if (brandId === 'fastech') {
+        assert.equal(largest, 12)
+        assert.deepEqual(offered.filter((value) => value > 12), [])
+      }
+    }
+
+    // Voltage and protocol dropdowns are narrowed to options that actually match.
+    assert.match(app, /const selectionVoltageChoices = useMemo/)
+    assert.match(app, /const selectionProtocolChoices = useMemo/)
+    assert.match(app, /\{selectionVoltageChoices\.map/)
+    assert.match(app, /\{selectionProtocolChoices\.map/)
+
+    // KOMOTEK and 미키풀리 publish no communication data, so no protocol option may survive for them.
+    for (const manufacturer of ['KOMOTEK', '미키풀리']) {
+      const products = motors.filter((product) => product.brand === manufacturer && product.lifecycle !== 'legacy')
+      const anyProtocol = ['ethercat', 'canopen', 'modbus', 'profinet', 'pulse', 'ttl', 'rs485', 'uart']
+        .some((protocol) => products.some((product) => filters.supportsSelectionProtocol(product, protocol)))
+      assert.equal(anyProtocol, false, `${manufacturer}는 공개된 통신 정보가 없습니다.`)
+    }
+
+    // Dead code removed.
+    assert.doesNotMatch(app, /function Metric\(/)
   } finally {
     await vite.close()
   }

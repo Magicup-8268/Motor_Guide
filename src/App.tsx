@@ -143,20 +143,18 @@ const torqueOptions = [
 const extendedTorqueFloors = [0.05, 0.1, 0.2, 0.5, 1, 3, 5, 9, 15, 30, 60]
 
 /**
- * 공개 토크 범위가 고정 목록과 크게 다른 제품군(예: 0.06–55 Nm의 브레이크)은
- * 고정 목록을 그대로 쓰면 최소 옵션 아래 모델을 조건검색으로 찾을 수 없다.
- * 그래서 실제 등록된 토크 범위 안쪽 구간만 남긴다.
- * 목록보다 작거나 같은 하한은 '전체'와 결과가 같고, 최댓값보다 큰 하한은 결과가 비므로 제외한다.
+ * 토크 하한 목록을 브랜드의 실제 공개 범위에서 만든다.
+ * 고정 목록을 그대로 쓰면 죽은 옵션이 남는다. FASTECH는 최대 12 Nm인데 15·30·60 Nm이 제시되어
+ * 세 항목 모두 결과가 0건이었고, 브레이크는 0.06 Nm이 최소 옵션 0.2 Nm 아래여서 찾을 수 없었다.
+ * 최솟값 이하 하한은 '전체'와 결과가 같고, 최댓값보다 큰 하한은 결과가 비므로 둘 다 제외한다.
  */
 function torqueOptionsFor(products: MotorProduct[], brandId: BrandId | 'all') {
-  if (brandId !== 'mikipulley') return torqueOptions
-
   const publishedTorques = products.map(selectionCapabilityValue).filter((value) => value > 0)
   if (!publishedTorques.length) return torqueOptions
 
   const minimum = Math.min(...publishedTorques)
   const maximum = Math.max(...publishedTorques)
-  const basis = torqueBasisLabel(brandId)
+  const basis = brandId === 'all' ? '토크' : torqueBasisLabel(brandId)
   return [
     { value: 0, label: `${basis} 전체` },
     ...extendedTorqueFloors
@@ -331,7 +329,13 @@ function loadSelectionPlans() {
   }
 }
 
-function toSearchText(product: MotorProduct) {
+/**
+ * 검색 대상 필드를 하나로 이어 붙이지 않고 배열로 유지한다.
+ * 예전에는 전부 이어 붙인 뒤 구분자를 지워 한 덩어리로 만들었는데, 그러면
+ * 서로 다른 필드의 숫자와 단위가 붙어 버려 "12 Nm"이 12-bit·12.5 A·125 W에도 걸렸다.
+ * (실측: "12 Nm" 77건 중 실제 해당 4건, "4.1 Nm" 15건 중 1건)
+ */
+function searchFields(product: MotorProduct) {
   const { specs } = product
   const category = categoryForProduct(product)
   return [
@@ -373,11 +377,23 @@ function toSearchText(product: MotorProduct) {
     specs.brake,
     specs.safety,
     ...(specs.protocols ?? []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLocaleLowerCase()
-    .replace(/[^0-9a-z가-힣]+/g, '')
+    // 숫자로만 저장된 토크는 예전에 검색 대상이 아니어서, 정작 정확한 토크 검색이 불가능했다.
+    specs.ratedTorque !== undefined ? `${specs.ratedTorque} Nm` : undefined,
+    specs.maxTorque !== undefined ? `${specs.maxTorque} Nm` : undefined,
+    specs.holdingTorque !== undefined ? `${specs.holdingTorque} Nm` : undefined,
+    specs.holdingTorqueText,
+    specs.staticFrictionTorque !== undefined ? `${specs.staticFrictionTorque} Nm` : undefined,
+    specs.staticFrictionTorqueText,
+    specs.phaseCurrentText,
+    specs.inertiaText,
+    specs.flangeText ?? (specs.flange !== undefined ? `${specs.flange} mm` : undefined),
+    product.family,
+  ].filter((value): value is string => Boolean(value))
+}
+
+/** 구분자를 지운 형태. "48V"로 입력해도 "48 VDC"를 찾게 해준다. */
+function squashForSearch(text: string) {
+  return text.toLocaleLowerCase().replace(/[^0-9a-z가-힣]+/g, '')
 }
 
 function searchTerms(query: string) {
@@ -386,6 +402,28 @@ function searchTerms(query: string) {
     .split(/\s+/)
     .map((term) => term.replace(/[^0-9a-z가-힣]+/g, ''))
     .filter(Boolean)
+}
+
+/**
+ * 검색은 두 단계로 판정한다.
+ * 1) 구문 일치: 입력 전체가 한 필드 안에 그대로 들어 있는 제품. "12 Nm"이면 실제로 12 Nm인 것만 잡힌다.
+ * 2) 구문 일치가 하나도 없을 때만 낱말 일치로 넓힌다. "48V 프레임리스"처럼 서로 다른 필드에
+ *    흩어진 조건도 찾을 수 있게 남겨 둔다.
+ * 판정을 제품별로 섞지 않고 목록 전체에 대해 한 번만 정하므로 결과가 뒤섞이지 않는다.
+ */
+function matchesQuery(products: MotorProduct[], query: string) {
+  const terms = searchTerms(query)
+  if (!terms.length) return products
+
+  const squashedFieldsOf = (product: MotorProduct) => searchFields(product).map(squashForSearch)
+  const phrase = squashForSearch(query)
+  const phraseMatches = products.filter((product) => squashedFieldsOf(product).some((field) => field.includes(phrase)))
+  if (phraseMatches.length) return phraseMatches
+
+  return products.filter((product) => {
+    const fields = squashedFieldsOf(product)
+    return terms.every((term) => fields.some((field) => field.includes(term)))
+  })
 }
 
 function dayOfYear(date: Date) {
@@ -761,16 +799,6 @@ function categoryFor(id: CategoryId) {
 
 function categoryForProduct(product: MotorProduct) {
   return categoryForBrand(brandIdForProduct(product), product.categoryId)
-}
-
-function Metric({ label, value, unit }: { label: string; value: string | number | undefined; unit?: string }) {
-  if (value === undefined || value === '') return null
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{typeof value === 'number' ? formatNumber(value) : value}<small>{unit}</small></strong>
-    </div>
-  )
 }
 
 interface ProductCardProps {
@@ -1529,13 +1557,11 @@ export default function App() {
   const categoryCounts = useMemo(() => Object.fromEntries(categories.map((category) => [category.id, catalogMotors.filter((motor) => motor.categoryId === category.id).length])), [catalogMotors])
   const robotisFamilies = useMemo(() => Array.from(new Set(catalogMotors.flatMap((motor) => motor.family ? [motor.family] : []))).sort(compareDynamixelFamilies), [catalogMotors])
   const visibleMotors = useMemo(() => {
-    const terms = searchTerms(query)
-    return catalogMotors
+    const narrowed = catalogMotors
       .filter((product) => categoryId === 'all' || product.categoryId === categoryId)
       .filter((product) => familyId === 'all' || product.family === familyId)
       .filter((product) => powerFloor === 0 || selectionCapabilityValue(product) >= powerFloor)
-      .filter((product) => !terms.length || terms.every((term) => toSearchText(product).includes(term)))
-      .sort((a, b) => b.weight - a.weight)
+    return matchesQuery(narrowed, query).sort((a, b) => b.weight - a.weight)
   }, [activeBrandId, catalogMotors, categoryId, familyId, powerFloor, query])
   const visibleMotorGroups = useMemo(() => activeBrandId === 'robotis' && familyId === 'all'
     ? robotisFamilies.map((family) => ({ family, products: visibleMotors.filter((product) => product.family === family) })).filter((group) => group.products.length > 0)
@@ -1556,9 +1582,25 @@ export default function App() {
         return (powerGapA - powerGapB) || (b.weight - a.weight)
       })
 
-    return { matches: matchProducts(motors) }
+    // 전원·통신·용량 조건은 해당 값이 공개되지 않은 제품까지 함께 걸러낸다.
+    // 예전에는 안내가 없어 카탈로그가 조용히 줄어들었다(통신 조건은 238개 중 150개가 정보 없음).
+    const inScope = motors
+      .filter((product) => product.lifecycle !== 'legacy')
+      .filter((product) => selectionManufacturer === 'all' || product.brand === manufacturerByBrandId[selectionManufacturer])
+      .filter((product) => selectionCategoryId === 'all' || product.categoryId === selectionCategoryId)
+    const undisclosed = inScope.filter((product) => {
+      const missingVoltage = selectionVoltage !== 'all' && !supportsSelectionVoltage(product, selectionVoltage)
+        && !selectionVoltageOptions.some((option) => option.value !== 'all' && supportsSelectionVoltage(product, option.value))
+      const missingProtocol = selectionProtocol !== 'all' && !supportsSelectionProtocol(product, selectionProtocol)
+        && !selectionProtocolOptions.some((option) => option.value !== 'all' && supportsSelectionProtocol(product, option.value))
+      const missingCapacity = selectionPowerFloor > 0 && selectionCapabilityValue(product) < 0
+      return missingVoltage || missingProtocol || missingCapacity
+    }).length
+
+    return { matches: matchProducts(motors), inScope: inScope.length, undisclosed }
   }, [selectionActive, selectionCategoryId, selectionManufacturer, selectionPowerFloor, selectionProtocol, selectionVoltage])
   const selectionMatches = selectionMatchResult.matches
+  const selectionUndisclosed = selectionMatchResult.undisclosed ?? 0
   const selectionResults = selectionMatches
   const selectionReportResults = selectionMatches.slice(0, 3)
   const currentSelectionCriteria: SelectionCriteria = { manufacturer: selectionManufacturer, categoryId: selectionCategoryId, voltage: selectionVoltage, powerFloor: selectionPowerFloor, protocol: selectionProtocol }
@@ -1575,6 +1617,17 @@ export default function App() {
       ? options
       : [...options, { value: selectionPowerFloor, label: `${selectionCapabilityLabel(selectionPowerFloor, selectionManufacturer)} (현재 조건)` }]
   }, [selectionCandidateMotors, selectionManufacturer, selectionPowerFloor])
+  // 전원·통신 목록은 고정 목록이라 제조사를 좁히면 결과가 0건인 항목이 그대로 남았다.
+  // (예: LS메카피온은 48 V만, 미키풀리는 24 V만 존재하고 통신은 아예 없다)
+  // 실제로 결과가 있는 항목만 남기고, 현재 고른 값은 항상 유지한다.
+  const selectionVoltageChoices = useMemo(() => selectionVoltageOptions.filter((option) => option.value === 'all'
+    || option.value === selectionVoltage
+    || selectionCandidateMotors.some((product) => supportsSelectionVoltage(product, option.value))),
+  [selectionCandidateMotors, selectionVoltage])
+  const selectionProtocolChoices = useMemo(() => selectionProtocolOptions.filter((option) => option.value === 'all'
+    || option.value === selectionProtocol
+    || selectionCandidateMotors.some((product) => supportsSelectionProtocol(product, option.value))),
+  [selectionCandidateMotors, selectionProtocol])
 
   useEffect(() => {
     if (selectionManufacturer === 'all' && selectionPowerFloor !== 0) setSelectionPowerFloor(0)
@@ -2025,9 +2078,9 @@ export default function App() {
           <div className="selection-controls" aria-label="빠른 모델 선정 조건">
             <label className="selection-control"><span>제조사</span><select value={selectionManufacturer} onChange={(event) => { clearSharedSelectionHash(); setSelectionManufacturer(event.target.value as SelectionManufacturer); setSelectionCategoryId('all'); setSelectionPowerFloor(0) }}>{selectionManufacturerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
             <label className="selection-control"><span>모터 유형</span><select value={selectionCategoryId} onChange={(event) => { clearSharedSelectionHash(); setSelectionCategoryId(event.target.value as CategoryId | 'all') }}><option value="all">유형 전체</option>{selectionCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Icon name="chevron-down" size={15} /></label>
-            <label className="selection-control"><span>전원</span><select value={selectionVoltage} onChange={(event) => { clearSharedSelectionHash(); setSelectionVoltage(event.target.value as SelectionVoltage) }}>{selectionVoltageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
+            <label className="selection-control"><span>전원</span><select value={selectionVoltage} onChange={(event) => { clearSharedSelectionHash(); setSelectionVoltage(event.target.value as SelectionVoltage) }}>{selectionVoltageChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
             <label className="selection-control"><span>{selectionManufacturer === 'robotis' ? '최소 공개 토크' : selectionManufacturer === 'fastech' ? '최소 홀딩 토크' : selectionManufacturer === 'all' ? '용량 · 토크 기준' : '최소 용량'}</span><select value={selectionPowerFloor} disabled={selectionManufacturer === 'all'} onChange={(event) => { clearSharedSelectionHash(); setSelectionPowerFloor(Number(event.target.value)) }}>{selectionPowerChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
-            <label className="selection-control"><span>통신 방식</span><select value={selectionProtocol} onChange={(event) => { clearSharedSelectionHash(); setSelectionProtocol(event.target.value as SelectionProtocol) }}>{selectionProtocolOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
+            <label className="selection-control"><span>통신 방식</span><select value={selectionProtocol} onChange={(event) => { clearSharedSelectionHash(); setSelectionProtocol(event.target.value as SelectionProtocol) }}>{selectionProtocolChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={15} /></label>
           </div>
           {selectionManufacturer === 'robotis' && <p className="selection-basis-note">DYNAMIXEL 토크는 제품군별로 스톨·연속·최대 기준이 다릅니다. 추천 결과의 <b>토크 기준</b>을 확인하고, 서로 다른 기준의 수치는 직접 비교하지 마세요.</p>}
           {selectionManufacturer === 'fastech' && <p className="selection-basis-note">파스텍의 제품군 토크는 <b>홀딩 토크(정지 유지 기준)</b>입니다. 실제 운전 토크는 속도·전원·구동 조건에 따라 달라지므로 공식 토크 곡선과 매뉴얼을 함께 확인하세요.</p>}
@@ -2037,7 +2090,7 @@ export default function App() {
             <small>이 기기에만 저장됩니다.</small>
           </div>}
           {!selectionActive ? <div className="selection-placeholder"><Icon name="sliders" size={20} /><span>필요한 조건 한 가지만 선택해도 추천을 시작합니다.</span></div> : selectionResults.length > 0 ? <div className="selection-results">
-            <div className="selection-result-head"><strong>{selectionManufacturer === 'all' ? '전체 제조사' : `${selectionManufacturerOptions.find((item) => item.value === selectionManufacturer)?.label}`} 조건 일치 <em>{selectionMatches.length}</em>개 모델</strong><span>{selectionManufacturer === 'robotis' ? '제품별 토크 기준을 확인해 같은 기준끼리 비교하세요.' : selectionManufacturer === 'fastech' ? '파스텍 결과는 제품군별 공개 홀딩 토크 기준입니다. 실제 운전 토크 곡선을 함께 확인하세요.' : '용량 조건 선택 시 요구 용량에 가까운 순으로 정렬합니다.'}</span></div>
+            <div className="selection-result-head"><strong>{selectionManufacturer === 'all' ? '전체 제조사' : `${selectionManufacturerOptions.find((item) => item.value === selectionManufacturer)?.label}`} 조건 일치 <em>{selectionMatches.length}</em>개 모델</strong><span>{selectionManufacturer === 'robotis' ? '제품별 토크 기준을 확인해 같은 기준끼리 비교하세요.' : selectionManufacturer === 'fastech' ? '파스텍 결과는 제품군별 공개 홀딩 토크 기준입니다. 실제 운전 토크 곡선을 함께 확인하세요.' : '용량 조건 선택 시 요구 용량에 가까운 순으로 정렬합니다.'}{selectionUndisclosed > 0 ? ` 선택한 조건의 공개 수치가 없는 ${selectionUndisclosed}개 모델은 결과에서 빠졌습니다.` : ''}</span></div>
             <div className="selection-result-grid">
               {selectionResults.map((product, index) => <article className="selection-result-card" key={product.id}>
                 <span className="selection-rank">0{index + 1}</span>
