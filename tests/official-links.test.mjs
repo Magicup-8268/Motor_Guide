@@ -1184,6 +1184,28 @@ test('Miki Pulley BXR spring-applied brakes are registered as brakes, not motors
       assert.ok(appSource.includes(`['${row}'`), `상세 사양에 '${row}' 행이 있어야 합니다.`)
     }
 
+    // The brake category and both brake series carry an official representative image.
+    const images = await vite.ssrLoadModule('/src/data/productImages.ts')
+    const brakeTile = images.categoryProductImageFor('brake', 'mikipulley')
+    assert.ok(brakeTile, '브레이크 카테고리에 대표 이미지가 있어야 합니다.')
+    assert.match(brakeTile.src, /mikipulley-products\/bxr\.jpg$/)
+    assert.match(brakeTile.sourceUrl, /^https:\/\/www\.mikipulley-us\.com\//)
+    for (const brake of brakes) {
+      const image = images.productImageFor(brake)
+      assert.ok(image, `${brake.model}에 대표 이미지가 연결되어야 합니다.`)
+      assert.match(image.src, /mikipulley-products\/bxr(-le)?\.jpg$/)
+    }
+
+    // Local public/ assets must be resolved against the deployment base path, otherwise every
+    // bundled product photo 404s under the GitHub Pages subpath.
+    const imagesSource = await readFile(new URL('../src/data/productImages.ts', import.meta.url), 'utf8')
+    assert.match(imagesSource, /import\.meta\.env\.BASE_URL/)
+    assert.match(imagesSource, /function withBasePath/)
+    assert.match(imagesSource, /withResolvedSrc\(officialSeriesImages\[product\.model\]/)
+    // Remote manufacturer images are left untouched.
+    const komotek = motors.find((product) => product.series === 'KANZ')
+    if (komotek) assert.match(images.productImageFor(komotek).src, /^https?:\/\//)
+
     // Both hub styles are recorded on every frame size so the part number can be picked.
     assert.ok(brakes.every((product) => typeof product.specs.hubOptions === 'string' && product.specs.hubOptions.length > 0))
 

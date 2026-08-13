@@ -77,10 +77,27 @@ const officialSeriesImages: Record<string, ProductImage> = {
   'KAFQ 48 V Pancake': { src: 'http://komotek.com/wp-content/uploads/2018/03/KAFZQ2.gif', alt: 'KOMOTEK KAFQ 48 V 저전압 서보', sourceUrl: 'http://komotek.com/ko/02products-servo-system-low-voltage-motor/' },
   'Special Servo Motor': { src: 'http://komotek.com/wp-content/uploads/2021/12/special-servo-motor-3-1.png', alt: 'KOMOTEK 특수 서보모터', sourceUrl: 'http://komotek.com/ko/02products-special-motors/' },
   'KOMOTEK Hollow Shaft Servo': { src: 'http://komotek.com/wp-content/uploads/2021/12/두산-frameless-motor.png', alt: 'KOMOTEK 중공축 서보모터', sourceUrl: 'http://komotek.com/ko/hollow-shaft-motor/' },
+  BXR: { src: '/mikipulley-products/bxr.jpg', alt: '미키풀리 BXR 무여자 작동형 브레이크 (사각 허브·스플라인 허브)', sourceUrl: 'https://www.mikipulley-us.com/electromagnetic-brakes-e.m./spring-actuated-brakes/bxr-model-brake' },
+  'BXR-LE': { src: '/mikipulley-products/bxr-le.jpg', alt: '미키풀리 BXR-LE 초박형 브레이크와 전용 컨트롤러', sourceUrl: 'https://www.mikipulley-us.com/electromagnetic-brakes-e.m./spring-actuated-brakes/bxr-le-model-brake' },
+}
+
+/**
+ * public/ 자산은 배포 base 경로 아래에 놓인다. GitHub Pages처럼 하위 경로(/Motor_Guide/)에
+ * 배포하면 '/kinco-products/...' 같은 루트 절대경로는 도메인 루트를 가리켜 404가 된다.
+ * 제조사 원격 이미지(http/https, 프로토콜 상대, data:)는 그대로 두고 로컬 경로만 base에 붙인다.
+ */
+function withBasePath(src: string) {
+  if (/^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(src) || src.startsWith('data:')) return src
+  const base = import.meta.env.BASE_URL || '/'
+  return `${base.replace(/\/+$/, '')}/${src.replace(/^\/+/, '')}`
+}
+
+function withResolvedSrc(image: ProductImage | undefined) {
+  return image ? { ...image, src: withBasePath(image.src) } : undefined
 }
 
 export function productImageFor(product: MotorProduct) {
-  return officialSeriesImages[product.model] ?? officialSeriesImages[product.series]
+  return withResolvedSrc(officialSeriesImages[product.model] ?? officialSeriesImages[product.series])
 }
 
 const categoryRepresentativeSeries: { [brand in BrandId]?: { [category in CategoryId]?: string } } = {
@@ -101,9 +118,12 @@ const categoryRepresentativeSeries: { [brand in BrandId]?: { [category in Catego
   fastech: {
     integrated: 'Ezi-SERVO II EtherCAT ALL',
   },
+  mikipulley: {
+    brake: 'BXR',
+  },
 }
 
 export function categoryProductImageFor(categoryId: CategoryId, brand: BrandId = 'kinco') {
   const representative = categoryRepresentativeSeries[brand]?.[categoryId]
-  return representative ? officialSeriesImages[representative] : undefined
+  return withResolvedSrc(representative ? officialSeriesImages[representative] : undefined)
 }
