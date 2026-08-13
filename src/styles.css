@@ -261,6 +261,8 @@ main { padding: 66px 0 112px; }
 .empty-state p { margin: 0; font-size: 13px; }
 .text-button { padding: 0; color: var(--sky-300); background: none; border: 0; font-size: 12px; font-weight: 700; }
 .empty-state .text-button { margin-top: 17px; }
+.empty-cross-brand { display: flex; flex-wrap: wrap; gap: 6px 15px; justify-content: center; margin-top: 11px !important; }
+.empty-cross-brand .text-button { margin-top: 0; }
 
 .favorites-section, .recent-section { padding-top: 90px; }
 .favorites-heading-actions { display: flex; align-items: center; gap: 16px; color: var(--ink-400); font-size: 12px; }

@@ -172,6 +172,20 @@ function loadDrivePairings() {
 }
 
 /**
+ * 출력은 "750W"처럼 붙여 쓰거나 "1 kW"로 찾는 사람이 많아 표기를 함께 색인한다.
+ * kW 별칭이 없으면 1,000 W 제품을 "1kW"로 검색해도 걸리지 않았다.
+ */
+function powerSearchAliases(value: number | undefined) {
+  if (value === undefined) return []
+  const aliases = [`${value} W`, `${value}W`]
+  if (value >= 1000) {
+    const kilowatts = value / 1000
+    aliases.push(`${kilowatts} kW`, `${kilowatts}kW`)
+  }
+  return aliases
+}
+
+/**
  * 검색 대상 필드를 하나로 이어 붙이지 않고 배열로 유지한다.
  * 예전에는 전부 이어 붙인 뒤 구분자를 지워 한 덩어리로 만들었는데, 그러면
  * 서로 다른 필드의 숫자와 단위가 붙어 버려 "12 Nm"이 12-bit·12.5 A·125 W에도 걸렸다.
@@ -211,8 +225,8 @@ function searchFields(product: MotorProduct) {
     specs.continuousCurrent,
     specs.peakCurrent,
     specs.currentSummary,
-    specs.ratedPower !== undefined ? `${specs.ratedPower} W` : undefined,
-    ...(specs.ratedPowerOptions?.flatMap((value) => [`${value} W`, `${value}W`]) ?? []),
+    ...powerSearchAliases(specs.ratedPower),
+    ...(specs.ratedPowerOptions?.flatMap(powerSearchAliases) ?? []),
     specs.phase,
     specs.ipRating,
     specs.encoder,
@@ -253,18 +267,35 @@ function searchTerms(query: string) {
  *    흩어진 조건도 찾을 수 있게 남겨 둔다.
  * 판정을 제품별로 섞지 않고 목록 전체에 대해 한 번만 정하므로 결과가 뒤섞이지 않는다.
  */
+/**
+ * 숫자로 시작하는 검색어는 단순 부분 문자열로 찾으면 안 된다.
+ * "50w"는 750 W·950 W·1050 W 안에도 들어 있어서 실측 22건 중 실제 50 W는 6건뿐이었고,
+ * "30w"는 17건이 전부 오탐이었다. 앞자리에 다른 숫자가 붙지 않은 위치만 인정한다.
+ */
+function fieldContainsTerm(field: string, term: string) {
+  if (!/^\d/.test(term)) return field.includes(term)
+
+  let from = 0
+  for (;;) {
+    const at = field.indexOf(term, from)
+    if (at === -1) return false
+    if (at === 0 || !/\d/.test(field[at - 1])) return true
+    from = at + 1
+  }
+}
+
 function matchesQuery(products: MotorProduct[], query: string) {
   const terms = searchTerms(query)
   if (!terms.length) return products
 
   const squashedFieldsOf = (product: MotorProduct) => searchFields(product).map(squashForSearch)
   const phrase = squashForSearch(query)
-  const phraseMatches = products.filter((product) => squashedFieldsOf(product).some((field) => field.includes(phrase)))
+  const phraseMatches = products.filter((product) => squashedFieldsOf(product).some((field) => fieldContainsTerm(field, phrase)))
   if (phraseMatches.length) return phraseMatches
 
   return products.filter((product) => {
     const fields = squashedFieldsOf(product)
-    return terms.every((term) => fields.some((field) => field.includes(term)))
+    return terms.every((term) => fields.some((field) => fieldContainsTerm(field, term)))
   })
 }
 
@@ -1232,6 +1263,19 @@ export default function App() {
   const visibleMotorGroups = useMemo(() => activeBrandId === 'robotis' && familyId === 'all'
     ? robotisFamilies.map((family) => ({ family, products: visibleMotors.filter((product) => product.family === family) })).filter((group) => group.products.length > 0)
     : [], [activeBrandId, familyId, robotisFamilies, visibleMotors])
+  // 검색은 선택한 제조사 안에서만 돌기 때문에, 예를 들어 로보티즈를 보는 중에 "50W"를 찾으면
+  // 킨코에 여섯 개가 있어도 0건으로 보인다. 결과가 없을 때 어느 제조사에 있는지 알려준다.
+  const otherBrandHits = useMemo(() => {
+    if (!query.trim() || visibleMotors.length > 0) return []
+    return brandCatalogs
+      .filter((brand) => brand.id !== activeBrandId)
+      .map((brand) => ({
+        id: brand.id,
+        name: brand.name,
+        count: matchesQuery(motors.filter((product) => product.brand === manufacturerByBrandId[brand.id]), query).length,
+      }))
+      .filter((hit) => hit.count > 0)
+  }, [activeBrandId, query, visibleMotors.length])
   // 전원·통신·용량 조건은 해당 값이 공개되지 않은 제품까지 함께 걸러낸다.
   // 안내가 없으면 카탈로그가 조용히 줄어든다(통신 조건은 전체 중 절반 이상이 정보 없음).
   const directoryUndisclosed = useMemo(() => {
@@ -1286,7 +1330,9 @@ export default function App() {
       .filter((motor) => !modelMenuFastechSeries || motor.series === modelMenuFastechSeries)
     : []
 
-  const selectBrand = (brandId: BrandId) => {
+  // 다른 제조사로 건너갈 때는 검색어를 남겨야 한다. 그러지 않으면 "이 제조사에 6개 있음"을
+  // 눌러 이동한 순간 검색어가 지워져 방금 찾던 결과가 사라진다.
+  const selectBrand = (brandId: BrandId, options?: { keepQuery?: boolean }) => {
     setActiveBrandId(brandId)
     setCategoryId('all')
     setFamilyId('all')
@@ -1296,7 +1342,7 @@ export default function App() {
     setPowerFloor(0)
     setDirectoryVoltage('all')
     setDirectoryProtocol('all')
-    setQuery('')
+    if (!options?.keepQuery) setQuery('')
   }
 
   const openDetail = (product: MotorProduct, tab: DetailTab = 'specs', returnCategoryId: CategoryId | null = null, fastechVariantId: string | null = null) => {
@@ -1582,7 +1628,7 @@ export default function App() {
             </section>)}
           </div> : <div className="motor-grid">
             {visibleMotors.map((product) => <ProductCard key={product.id} product={product} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}
-            {visibleMotors.length === 0 && <div className="empty-state"><Icon name="search" size={28} /><h3>조건에 맞는 모델이 없습니다.</h3><p>모델명 일부나 더 넓은 조건으로 다시 검색해보세요.</p><button className="text-button" onClick={() => { setQuery(''); setCategoryId('all'); setFamilyId('all'); setRobotisLineup('current'); setPowerFloor(0); setDirectoryVoltage('all'); setDirectoryProtocol('all') }}>필터 초기화</button></div>}
+            {visibleMotors.length === 0 && <div className="empty-state"><Icon name="search" size={28} /><h3>조건에 맞는 모델이 없습니다.</h3><p>{otherBrandHits.length > 0 ? '이 제조사에는 없지만 다른 제조사에 있습니다.' : '모델명 일부나 더 넓은 조건으로 다시 검색해보세요.'}</p>{otherBrandHits.length > 0 && <p className="empty-cross-brand">{otherBrandHits.map((hit) => <button key={hit.id} className="text-button" onClick={() => selectBrand(hit.id, { keepQuery: true })}>{hit.name} {hit.count}개</button>)}</p>}<button className="text-button" onClick={() => { setQuery(''); setCategoryId('all'); setFamilyId('all'); setRobotisLineup('current'); setPowerFloor(0); setDirectoryVoltage('all'); setDirectoryProtocol('all') }}>필터 초기화</button></div>}
           </div>}
         </section>
 

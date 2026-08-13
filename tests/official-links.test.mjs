@@ -1150,3 +1150,71 @@ test('search keeps numeric queries precise and every capacity floor returns resu
     await vite.close()
   }
 })
+
+test('capacity search matches whole numbers and points at other manufacturers when the current one has none', async () => {
+  const app = await readFile(appPath, 'utf8')
+
+  // "50w" must not match 750 W / 950 W / 1050 W. Measured before the fix: 22 hits, 6 real.
+  assert.match(app, /function fieldContainsTerm/)
+  assert.match(app, /if \(!\/\^\\d\/\.test\(term\)\) return field\.includes\(term\)/)
+  assert.match(app, /if \(at === 0 \|\| !\/\\d\/\.test\(field\[at - 1\]\)\) return true/)
+  assert.match(app, /fields\.some\(\(field\) => fieldContainsTerm\(field, term\)\)/)
+  assert.match(app, /some\(\(field\) => fieldContainsTerm\(field, phrase\)\)/)
+  assert.doesNotMatch(app, /field\.includes\(phrase\)/)
+
+  // 1,000 W products must also answer to "1 kW".
+  assert.match(app, /function powerSearchAliases/)
+  assert.match(app, /aliases\.push\(`\$\{kilowatts\} kW`, `\$\{kilowatts\}kW`\)/)
+
+  // Search is scoped to the selected manufacturer, so a miss must say where the hits are.
+  assert.match(app, /const otherBrandHits = useMemo/)
+  assert.match(app, /className="empty-cross-brand"/)
+  assert.match(app, /selectBrand\(hit\.id, \{ keepQuery: true \}\)/)
+  // Jumping to another manufacturer must not wipe the query that found it.
+  assert.match(app, /const selectBrand = \(brandId: BrandId, options\?: \{ keepQuery\?: boolean \}\) =>/)
+  assert.match(app, /if \(!options\?\.keepQuery\) setQuery\(''\)/)
+})
+
+test('whole-number capacity matching holds against the real catalogue', async () => {
+  const vite = await createServer({
+    root: process.cwd(),
+    appType: 'custom',
+    server: { middlewareMode: true },
+  })
+
+  try {
+    const { motors } = await vite.ssrLoadModule('/src/data/motors.ts')
+
+    // Reproduces the app's numeric boundary rule against the published power figures.
+    const containsWholeNumber = (haystack, needle) => {
+      let from = 0
+      for (;;) {
+        const at = haystack.indexOf(needle, from)
+        if (at === -1) return false
+        if (at === 0 || !/\d/.test(haystack[at - 1])) return true
+        from = at + 1
+      }
+    }
+
+    const powersOf = (product) => {
+      const { specs } = product
+      const values = specs.ratedPowerOptions?.length ? specs.ratedPowerOptions : specs.ratedPower !== undefined ? [specs.ratedPower] : []
+      return values
+    }
+
+    for (const watts of [30, 50, 100, 400, 750, 1000]) {
+      const term = `${watts}w`
+      const matched = motors.filter((product) => powersOf(product).some((value) => containsWholeNumber(`${value}w`, term)))
+      const real = matched.filter((product) => powersOf(product).includes(watts))
+      assert.deepEqual(matched, real, `${watts} W 검색은 실제 ${watts} W 제품만 잡아야 합니다.`)
+    }
+
+    // The specific regression: 750 W and 1,050 W must never answer to "50w".
+    for (const value of [750, 950, 1050, 250]) {
+      assert.equal(containsWholeNumber(`${value}w`, '50w'), false, `${value} W는 50 W 검색에 걸리면 안 됩니다.`)
+    }
+    assert.equal(containsWholeNumber('50w', '50w'), true)
+  } finally {
+    await vite.close()
+  }
+})
