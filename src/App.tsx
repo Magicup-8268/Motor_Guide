@@ -18,8 +18,6 @@ const storageKeys = {
   favorites: 'motor-atlas:favorites:v1',
   favoriteMetadata: 'motor-atlas:favorite-metadata:v1',
   drivePairings: 'motor-atlas:drive-pairings:v1',
-  bomProjects: 'motor-atlas:bom-projects:v1',
-  activeBomProject: 'motor-atlas:active-bom-project:v1',
   activeBrand: 'motor-atlas:active-brand:v1',
   selectionPlans: 'motor-atlas:selection-plans:v1',
   recents: 'motor-atlas:recents:v1',
@@ -30,8 +28,6 @@ type Theme = 'dark' | 'light'
 type DetailTab = 'specs' | 'manual'
 type FavoriteStatus = 'reviewing' | 'candidate' | 'selected'
 type RobotisLineup = 'current' | 'legacy' | 'all'
-type BomItemStatus = 'reviewing' | 'quotation' | 'ordered' | 'received'
-type BomItemKind = 'motor-drive' | 'accessory'
 type SelectionManufacturer = 'all' | BrandId
 
 interface BeforeInstallPromptEvent extends Event {
@@ -58,35 +54,7 @@ interface SelectionPlan extends SelectionCriteria {
   createdAt: string
 }
 
-interface BomItem {
-  id: string
-  kind: BomItemKind
-  motor: string
-  drive: string
-  motorUrl: string
-  driveUrl: string
-  quantity: number
-  status: BomItemStatus
-  unitPrice: number
-  leadDate: string
-  note: string
-}
-
-interface BomProject {
-  id: string
-  name: string
-  note: string
-  createdAt: string
-  items: BomItem[]
-}
-
 const defaultFavoriteMetadata: FavoriteMetadata = { status: 'reviewing', note: '' }
-const bomStatusOptions: Array<{ value: BomItemStatus; label: string }> = [
-  { value: 'reviewing', label: '검토 중' },
-  { value: 'quotation', label: '견적 요청' },
-  { value: 'ordered', label: '발주 완료' },
-  { value: 'received', label: '입고 완료' },
-]
 
 const selectionVoltageOptions: Array<{ value: SelectionVoltage; label: string }> = [
   { value: 'all', label: '전원 전체' },
@@ -255,58 +223,6 @@ function loadDrivePairings() {
   } catch {
     return {}
   }
-}
-
-function isBomItemStatus(value: unknown): value is BomItemStatus {
-  return bomStatusOptions.some((option) => option.value === value)
-}
-
-function loadBomProjects() {
-  try {
-    const item = JSON.parse(window.localStorage.getItem(storageKeys.bomProjects) ?? '[]')
-    if (!Array.isArray(item)) return []
-    return item.flatMap((project): BomProject[] => {
-      if (!project || typeof project !== 'object') return []
-      const candidate = project as Partial<BomProject>
-      if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || typeof candidate.createdAt !== 'string' || !Array.isArray(candidate.items)) return []
-      const items = candidate.items.flatMap((entry): BomItem[] => {
-        if (!entry || typeof entry !== 'object') return []
-        const bomItem = entry as Partial<BomItem>
-        if (
-          typeof bomItem.id !== 'string' ||
-          typeof bomItem.motor !== 'string' ||
-          typeof bomItem.drive !== 'string' ||
-          typeof bomItem.motorUrl !== 'string' ||
-          typeof bomItem.driveUrl !== 'string' ||
-          typeof bomItem.leadDate !== 'string' ||
-          typeof bomItem.note !== 'string' ||
-          (bomItem.kind !== 'motor-drive' && bomItem.kind !== 'accessory') ||
-          typeof bomItem.quantity !== 'number' ||
-          !Number.isInteger(bomItem.quantity) ||
-          bomItem.quantity < 1 ||
-          bomItem.quantity > 10_000 ||
-          typeof bomItem.unitPrice !== 'number' ||
-          !Number.isFinite(bomItem.unitPrice) ||
-          bomItem.unitPrice < 0 ||
-          bomItem.unitPrice > 1_000_000_000 ||
-          !isBomItemStatus(bomItem.status)
-        ) return []
-        return [{ id: bomItem.id, kind: bomItem.kind, motor: bomItem.motor, drive: bomItem.drive, motorUrl: bomItem.motorUrl, driveUrl: bomItem.driveUrl, quantity: bomItem.quantity, status: bomItem.status, unitPrice: bomItem.unitPrice, leadDate: bomItem.leadDate, note: bomItem.note }]
-      })
-      return [{ id: candidate.id, name: candidate.name.slice(0, 80), note: typeof candidate.note === 'string' ? candidate.note.slice(0, 500) : '', createdAt: candidate.createdAt, items: items.slice(0, 200) }]
-    }).slice(0, 20)
-  } catch {
-    return []
-  }
-}
-
-function bomId(prefix: string) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function newBomProject(name: string): BomProject {
-  const date = new Date().toLocaleDateString('ko-KR').replace(/\./g, '').replace(/\s+/g, '-')
-  return { id: bomId('project'), name: name.trim().slice(0, 80) || `새 프로젝트 ${date}`, note: '', createdAt: new Date().toISOString(), items: [] }
 }
 
 function loadSelectionPlans() {
@@ -980,7 +896,7 @@ function drivePairingText(product: MotorProduct, item: DriveMatch) {
   ].filter(Boolean).join('\n')
 }
 
-function DriveCompatibilityPanel({ product, onOpenDrive, selectedDriveKey, onSelectDrive, onCopyPairing, onAddToBom }: { product: MotorProduct; onOpenDrive: (url: string) => void; selectedDriveKey?: string; onSelectDrive: (productId: string, driveKey: string | null) => void; onCopyPairing: (product: MotorProduct, item: DriveMatch) => void; onAddToBom: (product: MotorProduct, item: DriveMatch) => void }) {
+function DriveCompatibilityPanel({ product, onOpenDrive, selectedDriveKey, onSelectDrive, onCopyPairing }: { product: MotorProduct; onOpenDrive: (url: string) => void; selectedDriveKey?: string; onSelectDrive: (productId: string, driveKey: string | null) => void; onCopyPairing: (product: MotorProduct, item: DriveMatch) => void }) {
   const compatibility = driveCompatibilityFor(product)
   const selectedDrive = compatibility.matches.find((item) => driveMatchKey(item) === selectedDriveKey) ?? (compatibility.requirement === 'integrated' ? compatibility.matches[0] : undefined)
 
@@ -1037,7 +953,6 @@ function DriveCompatibilityPanel({ product, onOpenDrive, selectedDriveKey, onSel
         </div>
         <div className="drive-pairing-actions">
           <button className="button secondary" onClick={() => onCopyPairing(product, selectedDrive)}><Icon name="share" size={16} />조합표 복사</button>
-          <button className="button secondary" onClick={() => onAddToBom(product, selectedDrive)}><Icon name="grid" size={16} />프로젝트 BOM 담기</button>
           {compatibility.requirement === 'external' && <button className="button secondary" onClick={() => onSelectDrive(product.id, null)}>선택 해제</button>}
         </div>
         {compatibility.requirement === 'external' && <small>선택한 조합은 이 기기에 자동 저장됩니다.</small>}
@@ -1045,66 +960,6 @@ function DriveCompatibilityPanel({ product, onOpenDrive, selectedDriveKey, onSel
       <p className="drive-match-note"><strong>판정 기준:</strong> “공개 사양 일치”는 전압·출력·전류 범위를 대조한 후보이며, “추가 확인”은 권선·엔코더·브레이크·주문 코드 확인이 필요한 조합입니다.</p>
     </section>
   )
-}
-
-function BomProjectModal({ projects, activeProjectId, exportPending, onClose, onSelectProject, onCreateProject, onDeleteProject, onUpdateProject, onAddAccessory, onUpdateItem, onRemoveItem, onExportProject }: { projects: BomProject[]; activeProjectId: string | null; exportPending: boolean; onClose: () => void; onSelectProject: (projectId: string) => void; onCreateProject: (name: string) => void; onDeleteProject: (projectId: string) => void; onUpdateProject: (projectId: string, patch: Partial<Pick<BomProject, 'name' | 'note'>>) => void; onAddAccessory: (projectId: string, name: string, quantity: number) => void; onUpdateItem: (projectId: string, itemId: string, patch: Partial<BomItem>) => void; onRemoveItem: (projectId: string, itemId: string) => void; onExportProject: (project: BomProject) => void }) {
-  const [newProjectName, setNewProjectName] = useState('')
-  const [accessoryName, setAccessoryName] = useState('')
-  const [accessoryQuantity, setAccessoryQuantity] = useState('1')
-  const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0]
-  const totalCost = activeProject?.items.reduce((total, item) => total + item.quantity * item.unitPrice, 0) ?? 0
-
-  const createProject = () => {
-    onCreateProject(newProjectName)
-    setNewProjectName('')
-  }
-  const addAccessory = () => {
-    if (!activeProject || !accessoryName.trim()) return
-    const quantity = Math.min(10_000, Math.max(1, Math.floor(Number(accessoryQuantity) || 1)))
-    onAddAccessory(activeProject.id, accessoryName, quantity)
-    setAccessoryName('')
-    setAccessoryQuantity('1')
-  }
-
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-    <section className="bom-modal" role="dialog" aria-modal="true" aria-labelledby="bom-title" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="bom-modal-head">
-        <div><p className="section-eyebrow">PROJECT BOM</p><h2 id="bom-title">프로젝트 BOM · 발주 관리</h2><p>확정한 모터+드라이브 조합과 부속품을 프로젝트별로 관리하고, 발주용 엑셀로 내보낼 수 있습니다.</p></div>
-        <button className="icon-button" aria-label="프로젝트 BOM 닫기" onClick={onClose}><Icon name="x" /></button>
-      </div>
-
-      <div className="bom-project-bar">
-        {projects.length > 0 && <label><span>현재 프로젝트</span><select value={activeProject?.id ?? ''} onChange={(event) => onSelectProject(event.target.value)}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
-        <div className="bom-create-project"><input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} maxLength={80} placeholder="새 프로젝트명" onKeyDown={(event) => { if (event.key === 'Enter') createProject() }} /><button className="button secondary" onClick={createProject}>새 프로젝트</button></div>
-      </div>
-
-      {activeProject ? <>
-        <div className="bom-project-fields">
-          <label><span>프로젝트명</span><input value={activeProject.name} onChange={(event) => onUpdateProject(activeProject.id, { name: event.target.value.slice(0, 80) })} /></label>
-          <label><span>프로젝트 메모</span><textarea value={activeProject.note} onChange={(event) => onUpdateProject(activeProject.id, { note: event.target.value.slice(0, 500) })} maxLength={500} placeholder="설치 위치, 견적 요청처, 구매 조건 등을 기록하세요." /></label>
-        </div>
-        <div className="bom-summary"><span>구성 품목 <strong>{activeProject.items.length}</strong></span><span>총 수량 <strong>{activeProject.items.reduce((total, item) => total + item.quantity, 0)}</strong></span><span>예상 구매액 <strong>{totalCost > 0 ? `${formatNumber(totalCost)} KRW` : '미입력'}</strong></span><button className="button primary" onClick={() => onExportProject(activeProject)} disabled={activeProject.items.length === 0 || exportPending}>{exportPending ? '엑셀 생성 중…' : 'BOM 엑셀 다운로드'} <Icon name="install" size={16} /></button></div>
-
-        <div className="bom-table-wrap">
-          <table className="bom-table">
-            <thead><tr><th>구성</th><th>수량</th><th>구매 상태</th><th>견적 단가 (KRW)</th><th>입고 예정일</th><th>메모</th><th aria-label="삭제" /></tr></thead>
-            <tbody>{activeProject.items.map((item) => <tr key={item.id}>
-              <td><strong>{item.motor || '부속품'}</strong><small>{item.drive}</small></td>
-              <td><input type="number" min="1" max="10000" value={item.quantity} onChange={(event) => onUpdateItem(activeProject.id, item.id, { quantity: Math.min(10_000, Math.max(1, Math.floor(Number(event.target.value) || 1))) })} /></td>
-              <td><select value={item.status} onChange={(event) => onUpdateItem(activeProject.id, item.id, { status: event.target.value as BomItemStatus })}>{bomStatusOptions.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></td>
-              <td><input type="number" min="0" max="1000000000" step="1000" value={item.unitPrice || ''} placeholder="미입력" onChange={(event) => onUpdateItem(activeProject.id, item.id, { unitPrice: Math.min(1_000_000_000, Math.max(0, Number(event.target.value) || 0)) })} /></td>
-              <td><input type="date" value={item.leadDate} onChange={(event) => onUpdateItem(activeProject.id, item.id, { leadDate: event.target.value })} /></td>
-              <td><input value={item.note} maxLength={160} placeholder="메모" onChange={(event) => onUpdateItem(activeProject.id, item.id, { note: event.target.value })} /></td>
-              <td><button className="bom-remove" aria-label={`${item.motor || item.drive} 삭제`} onClick={() => onRemoveItem(activeProject.id, item.id)}><Icon name="x" size={15} /></button></td>
-            </tr>)}</tbody>
-          </table>
-          {activeProject.items.length === 0 && <div className="bom-empty"><Icon name="grid" size={22} /><p>상세 화면에서 확정한 모터+드라이브 조합을 BOM에 담아보세요.</p></div>}
-        </div>
-        <div className="bom-accessory-add"><div><p className="section-eyebrow">ADD ACCESSORY</p><strong>케이블 · 브레이크 · 감속기 등 부속품 추가</strong></div><input value={accessoryName} onChange={(event) => setAccessoryName(event.target.value)} maxLength={100} placeholder="예: EtherCAT 케이블 5 m" /><input type="number" min="1" max="10000" value={accessoryQuantity} onChange={(event) => setAccessoryQuantity(event.target.value)} aria-label="부속품 수량" /><button className="button secondary" onClick={addAccessory} disabled={!accessoryName.trim()}>부속품 추가</button></div>
-        <div className="bom-modal-actions"><small>저장 위치: 이 기기 브라우저</small><button className="text-button bom-delete-project" onClick={() => onDeleteProject(activeProject.id)}>현재 프로젝트 삭제</button></div>
-      </> : <div className="bom-first-empty"><Icon name="grid" size={28} /><h3>프로젝트를 먼저 만들어 주세요.</h3><p>프로젝트를 만든 뒤 상세 화면의 “프로젝트 BOM 담기”로 조합을 추가할 수 있습니다.</p></div>}
-    </section>
-  </div>
 }
 
 interface ModelBrowserModalProps {
@@ -1211,19 +1066,16 @@ interface DetailModalProps {
   onFavorite: (id: string) => void
   onCompare: (id: string) => void
   onShare: (product: MotorProduct) => void
-  onDownloadSpecPdf: (product: MotorProduct, fastechVariantId?: string) => void
-  pdfDownloadPending: boolean
   onOpenOfficial: (product: MotorProduct) => void
   onOpenDrive: (url: string) => void
   selectedDriveKey?: string
   onSelectDrive: (productId: string, driveKey: string | null) => void
   onCopyPairing: (product: MotorProduct, item: DriveMatch) => void
-  onAddToBom: (product: MotorProduct, item: DriveMatch) => void
   onOpenManual: (product: MotorProduct) => void
   onOpenDrawing: (product: MotorProduct, drawing: DrawingArchive) => void
 }
 
-function DetailModal({ product, favorite, compared, initialTab, initialFastechVariantId, onClose, onBackToModels, onFavorite, onCompare, onShare, onDownloadSpecPdf, pdfDownloadPending, onOpenOfficial, onOpenDrive, selectedDriveKey, onSelectDrive, onCopyPairing, onAddToBom, onOpenManual, onOpenDrawing }: DetailModalProps) {
+function DetailModal({ product, favorite, compared, initialTab, initialFastechVariantId, onClose, onBackToModels, onFavorite, onCompare, onShare, onOpenOfficial, onOpenDrive, selectedDriveKey, onSelectDrive, onCopyPairing, onOpenManual, onOpenDrawing }: DetailModalProps) {
   const category = categoryForProduct(product)
   const fastechVariants = fastechVariantsFor(product)
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
@@ -1269,14 +1121,11 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
           <dl className="spec-list">
             {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
-          <DriveCompatibilityPanel product={product} onOpenDrive={onOpenDrive} selectedDriveKey={selectedDriveKey} onSelectDrive={onSelectDrive} onCopyPairing={onCopyPairing} onAddToBom={onAddToBom} />
+          <DriveCompatibilityPanel product={product} onOpenDrive={onOpenDrive} selectedDriveKey={selectedDriveKey} onSelectDrive={onSelectDrive} onCopyPairing={onCopyPairing} />
           <p className="source-note">{sourceLabel}. 값이 공개되지 않은 항목은 의도적으로 표시하지 않았습니다.</p>
           </> : <ManualPanel product={displayProduct} onOpenManual={onOpenManual} onOpenOfficial={onOpenOfficial} onOpenDrawing={onOpenDrawing} />}
         </div>
         <div className="detail-actions">
-          <button className="button secondary pdf-download" onClick={() => onDownloadSpecPdf(product, selectedFastechVariant?.id)} disabled={pdfDownloadPending}>
-            <Icon name="install" size={17} /> {pdfDownloadPending ? 'PDF 생성 중...' : 'PDF 카드'}
-          </button>
           <button className="button secondary share-button" onClick={() => onShare(displayProduct)}>
             <Icon name="share" size={17} /> 사양 공유
           </button>
@@ -1409,18 +1258,11 @@ export default function App() {
   const [selectionVoltage, setSelectionVoltage] = useState<SelectionVoltage>('all')
   const [selectionPowerFloor, setSelectionPowerFloor] = useState(0)
   const [selectionProtocol, setSelectionProtocol] = useState<SelectionProtocol>('all')
-  const [selectionReportTitle, setSelectionReportTitle] = useState('')
-  const [selectionReportNote, setSelectionReportNote] = useState('')
-  const [selectionReportPending, setSelectionReportPending] = useState(false)
   const [selectionPlans, setSelectionPlans] = useState<SelectionPlan[]>(() => loadSelectionPlans())
   const [selectionPlanName, setSelectionPlanName] = useState('')
   const [favorites, setFavorites] = useState<string[]>(() => loadStringList(storageKeys.favorites))
   const [favoriteMetadata, setFavoriteMetadata] = useState<Record<string, FavoriteMetadata>>(() => loadFavoriteMetadata())
   const [drivePairings, setDrivePairings] = useState<Record<string, string>>(() => loadDrivePairings())
-  const [bomProjects, setBomProjects] = useState<BomProject[]>(() => loadBomProjects())
-  const [activeBomProjectId, setActiveBomProjectId] = useState<string | null>(() => window.localStorage.getItem(storageKeys.activeBomProject) || null)
-  const [bomOpen, setBomOpen] = useState(false)
-  const [bomDownloadPending, setBomDownloadPending] = useState(false)
   const [recents, setRecents] = useState<string[]>(() => loadStringList(storageKeys.recents))
   const [comparison, setComparison] = useState<string[]>([])
   const [selected, setSelected] = useState<MotorProduct | null>(null)
@@ -1432,7 +1274,6 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [theme, setTheme] = useState<Theme>(() => (window.localStorage.getItem(storageKeys.theme) as Theme | null) ?? 'dark')
   const [comparisonDownloadPending, setComparisonDownloadPending] = useState(false)
-  const [modelPdfPendingId, setModelPdfPendingId] = useState<string | null>(null)
   const [comparisonCollapsed, setComparisonCollapsed] = useState(false)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isStandalone, setIsStandalone] = useState(isStandaloneMode)
@@ -1442,8 +1283,6 @@ export default function App() {
   useEffect(() => { window.localStorage.setItem(storageKeys.favorites, JSON.stringify(favorites)) }, [favorites])
   useEffect(() => { window.localStorage.setItem(storageKeys.favoriteMetadata, JSON.stringify(favoriteMetadata)) }, [favoriteMetadata])
   useEffect(() => { window.localStorage.setItem(storageKeys.drivePairings, JSON.stringify(drivePairings)) }, [drivePairings])
-  useEffect(() => { window.localStorage.setItem(storageKeys.bomProjects, JSON.stringify(bomProjects)) }, [bomProjects])
-  useEffect(() => { if (activeBomProjectId) window.localStorage.setItem(storageKeys.activeBomProject, activeBomProjectId); else window.localStorage.removeItem(storageKeys.activeBomProject) }, [activeBomProjectId])
   useEffect(() => { window.localStorage.setItem(storageKeys.selectionPlans, JSON.stringify(selectionPlans)) }, [selectionPlans])
   useEffect(() => { window.localStorage.setItem(storageKeys.recents, JSON.stringify(recents)) }, [recents])
   useEffect(() => { window.localStorage.setItem(storageKeys.activeBrand, activeBrandId) }, [activeBrandId])
@@ -1602,7 +1441,6 @@ export default function App() {
   const selectionMatches = selectionMatchResult.matches
   const selectionUndisclosed = selectionMatchResult.undisclosed ?? 0
   const selectionResults = selectionMatches
-  const selectionReportResults = selectionMatches.slice(0, 3)
   const currentSelectionCriteria: SelectionCriteria = { manufacturer: selectionManufacturer, categoryId: selectionCategoryId, voltage: selectionVoltage, powerFloor: selectionPowerFloor, protocol: selectionProtocol }
   const directoryPowerChoices = useMemo(() => {
     const options = brandUsesTorque(activeBrandId) ? torqueOptionsFor(catalogMotors, activeBrandId) : powerOptionsFor(catalogMotors)
@@ -1720,78 +1558,10 @@ export default function App() {
       setNotice('조합표를 복사하지 못했습니다. 다시 시도해 주세요.')
     }
   }
-  const createBomProject = (name: string) => {
-    const project = newBomProject(name)
-    setBomProjects((current) => [project, ...current])
-    setActiveBomProjectId(project.id)
-    setNotice('새 프로젝트 BOM을 만들었습니다.')
-  }
-  const updateBomProject = (projectId: string, patch: Partial<Pick<BomProject, 'name' | 'note'>>) => {
-    setBomProjects((current) => current.map((project) => project.id === projectId ? { ...project, ...patch, name: (patch.name ?? project.name).slice(0, 80), note: (patch.note ?? project.note).slice(0, 500) } : project))
-  }
-  const deleteBomProject = (projectId: string) => {
-    const remaining = bomProjects.filter((project) => project.id !== projectId)
-    setBomProjects(remaining)
-    setActiveBomProjectId(remaining[0]?.id ?? null)
-    setNotice('프로젝트 BOM을 삭제했습니다.')
-  }
-  const updateBomItem = (projectId: string, itemId: string, patch: Partial<BomItem>) => {
-    setBomProjects((current) => current.map((project) => project.id === projectId ? { ...project, items: project.items.map((item) => item.id === itemId ? { ...item, ...patch } : item) } : project))
-  }
-  const removeBomItem = (projectId: string, itemId: string) => {
-    setBomProjects((current) => current.map((project) => project.id === projectId ? { ...project, items: project.items.filter((item) => item.id !== itemId) } : project))
-    setNotice('BOM 품목을 삭제했습니다.')
-  }
-  const addBomAccessory = (projectId: string, name: string, quantity: number) => {
-    const item: BomItem = { id: bomId('accessory'), kind: 'accessory', motor: '', drive: name.trim().slice(0, 100), motorUrl: '', driveUrl: '', quantity, status: 'reviewing', unitPrice: 0, leadDate: '', note: '' }
-    setBomProjects((current) => current.map((project) => project.id === projectId ? { ...project, items: [...project.items, item].slice(0, 200) } : project))
-    setNotice('부속품을 BOM에 추가했습니다.')
-  }
-  const addDrivePairingToBom = (product: MotorProduct, item: DriveMatch) => {
-    const bomItem: BomItem = { id: bomId('motor-drive'), kind: 'motor-drive', motor: `${product.model} (${product.series})`, drive: `${item.family} · ${item.model}`, motorUrl: product.officialUrl, driveUrl: item.officialUrl, quantity: 1, status: 'reviewing', unitPrice: 0, leadDate: '', note: drivePairingStatusLabel(item.status) }
-    const activeId = activeBomProjectId && bomProjects.some((project) => project.id === activeBomProjectId) ? activeBomProjectId : bomProjects[0]?.id
-    if (!activeId) {
-      const project = newBomProject('')
-      setBomProjects([{ ...project, items: [bomItem] }])
-      setActiveBomProjectId(project.id)
-      setBomOpen(true)
-      setNotice('새 프로젝트 BOM에 모터+드라이브 조합을 담았습니다.')
-      return
-    }
-    setBomProjects((current) => current.map((project) => {
-      if (project.id !== activeId) return project
-      const existing = project.items.find((saved) => saved.kind === 'motor-drive' && saved.motor === bomItem.motor && saved.drive === bomItem.drive)
-      return existing ? { ...project, items: project.items.map((saved) => saved.id === existing.id ? { ...saved, quantity: Math.min(10_000, saved.quantity + 1) } : saved) } : { ...project, items: [...project.items, bomItem].slice(0, 200) }
-    }))
-    setActiveBomProjectId(activeId)
-    setBomOpen(true)
-    setNotice('프로젝트 BOM에 모터+드라이브 조합을 담았습니다.')
-  }
   const ensureServerApiAvailable = () => {
     if (SERVER_API_AVAILABLE) return true
     setNotice(SERVER_ONLY_NOTICE)
     return false
-  }
-  const downloadBomProject = async (project: BomProject) => {
-    if (!ensureServerApiAvailable()) return
-    setBomDownloadPending(true)
-    try {
-      const response = await fetch(new URL('/api/project-bom-xlsx', window.location.origin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project }) })
-      if (!response.ok) throw new Error(`BOM export failed with ${response.status}`)
-      const blob = await response.blob()
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `${project.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || 'Project'}-BOM.xlsx`
-      document.body.append(link)
-      link.click()
-      link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(link.href), 1_000)
-      setNotice('프로젝트 BOM 엑셀 파일을 다운로드했습니다.')
-    } catch {
-      setNotice('프로젝트 BOM 엑셀 파일을 만들지 못했습니다. 다시 시도해 주세요.')
-    } finally {
-      setBomDownloadPending(false)
-    }
   }
   const shareModel = async (product: MotorProduct) => {
     const url = sharedModelUrl(product)
@@ -1935,68 +1705,6 @@ export default function App() {
       setComparisonDownloadPending(false)
     }
   }
-  const downloadModelSpecPdf = async (product: MotorProduct, fastechVariantId?: string) => {
-    if (!ensureServerApiAvailable()) return
-    setModelPdfPendingId(product.id)
-    try {
-      const downloadUrl = new URL('/api/model-spec-pdf', window.location.origin)
-      downloadUrl.searchParams.set('id', product.id)
-      if (fastechVariantId) downloadUrl.searchParams.set('variant', fastechVariantId)
-      const response = await fetch(downloadUrl)
-      if (!response.ok) throw new Error(`Model PDF export failed with ${response.status}`)
-
-      const blob = await response.blob()
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `${product.id}-${product.brand}-Spec-Card.pdf`
-      document.body.append(link)
-      link.click()
-      link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(link.href), 1_000)
-      setNotice('모델 사양 PDF 카드를 다운로드했습니다.')
-    } catch {
-      setNotice('모델 사양 PDF 카드를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.')
-    } finally {
-      setModelPdfPendingId(null)
-    }
-  }
-  const downloadSelectionReport = async () => {
-    if (!selectionActive) {
-      setNotice('먼저 선정 조건을 적용해 주세요.')
-      return
-    }
-    if (!ensureServerApiAvailable()) return
-    setSelectionReportPending(true)
-    try {
-      const response = await fetch(new URL('/api/selection-report-pdf', window.location.origin), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: selectionReportTitle.trim().slice(0, 80),
-          note: selectionReportNote.trim().slice(0, 1_000),
-          brandId: activeBrandId,
-          criteria: currentSelectionCriteria,
-          comparisonIds: comparison,
-          recommendedIds: selectionReportResults.map((product) => product.id),
-        }),
-      })
-      if (!response.ok) throw new Error(`Selection report export failed with ${response.status}`)
-
-      const blob = await response.blob()
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = 'Magicup-Motor-Selection-Report.pdf'
-      document.body.append(link)
-      link.click()
-      link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(link.href), 1_000)
-      setNotice('선정 결과 보고서 PDF를 다운로드했습니다.')
-    } catch {
-      setNotice('선정 결과 보고서 PDF를 만들지 못했습니다. 잠시 뒤 다시 시도해 주세요.')
-    } finally {
-      setSelectionReportPending(false)
-    }
-  }
   const installApp = async () => {
     if (installPrompt) {
       await installPrompt.prompt()
@@ -2027,7 +1735,6 @@ export default function App() {
           <span><strong>Magicup-Work-Flow</strong></span>
         </a>
         <div className={`top-actions ${!isStandalone ? 'has-install' : ''}`}>
-          <button className="bom-open-button" onClick={() => setBomOpen(true)}><Icon name="grid" size={17} /><span>프로젝트 BOM</span><b>{bomProjects.reduce((total, project) => total + project.items.length, 0)}</b></button>
           {!isStandalone && <button className="install-button" onClick={installApp}><Icon name="install" size={17} /><span>{window.isSecureContext ? '앱 설치' : '홈 화면'}</span></button>}
           <button className="shortcut-button" aria-label="모터 검색" onClick={() => searchInput.current?.focus()}><Icon name="search" size={17} /> <span>빠른 검색</span><kbd>⌘ K</kbd></button>
           <button className="icon-button" aria-label={theme === 'dark' ? '라이트 테마로 바꾸기' : '다크 테마로 바꾸기'} onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} /></button>
@@ -2115,15 +1822,6 @@ export default function App() {
               <button className="icon-button selection-plan-remove" onClick={() => setSelectionPlans((current) => current.filter((item) => item.id !== plan.id))} aria-label={`${plan.name} 선정안 삭제`}><Icon name="x" size={16} /></button>
             </li>)}</ul>
           </section>}
-        </section>
-
-        <section className="selection-report" aria-labelledby="selection-report-title">
-          <div className="selection-report-head"><div><p className="section-eyebrow">PROJECT REPORT</p><h2 id="selection-report-title">선정 결과를 바로 공유 가능한 PDF로 만드세요.</h2><p>현재 선정 조건, 추천 후보 Top 3, 비교 대상과 프로젝트 메모를 두 페이지 보고서로 정리합니다.</p></div></div>
-          <div className="selection-report-fields">
-            <label><span>보고서 제목</span><input value={selectionReportTitle} onChange={(event) => setSelectionReportTitle(event.target.value)} maxLength={80} placeholder="예: AGV 구동축 1차 선정" /></label>
-            <label><span>프로젝트 메모 (선택)</span><textarea value={selectionReportNote} onChange={(event) => setSelectionReportNote(event.target.value)} maxLength={1_000} placeholder="예: 설치 전원, 제어기 통신 방식, 확인이 필요한 조건을 적어두세요." /></label>
-          </div>
-          <div className="selection-report-action"><small>{selectionActive ? `조건 일치 ${selectionResults.length}개 중 상위 ${selectionReportResults.length}개 · ${comparisonProducts.length ? `현재 비교함 ${comparisonProducts.length}개` : '추천 후보 자동 비교'}가 보고서에 포함됩니다.` : '선정 조건을 적용하면 보고서를 만들 수 있습니다.'}</small><button className="button primary" onClick={downloadSelectionReport} disabled={!selectionActive || selectionReportPending}>{selectionReportPending ? 'PDF 생성 중…' : '선정 결과 PDF 다운로드'} <Icon name="arrow-up-right" size={16} /></button></div>
         </section>
 
         <section className="summary-grid" aria-label="카탈로그 현황">
@@ -2233,9 +1931,8 @@ export default function App() {
 
       {comparisonProducts.length > 0 && !comparisonCollapsed && <ComparisonTray products={comparisonProducts} onRemove={(id) => setComparison((current) => current.filter((item) => item !== id))} onClear={() => { setComparison([]); setComparisonCollapsed(false) }} onClose={() => setComparisonCollapsed(true)} onOpen={openDetail} onDownload={downloadComparison} downloadPending={comparisonDownloadPending} />}
       {comparisonProducts.length > 0 && comparisonCollapsed && <button className="comparison-reopen" onClick={() => setComparisonCollapsed(false)}><Icon name="grid" size={16} />비교표 열기 <span>{comparisonProducts.length}</span></button>}
-      {bomOpen && <BomProjectModal projects={bomProjects} activeProjectId={activeBomProjectId} exportPending={bomDownloadPending} onClose={() => setBomOpen(false)} onSelectProject={setActiveBomProjectId} onCreateProject={createBomProject} onDeleteProject={deleteBomProject} onUpdateProject={updateBomProject} onAddAccessory={addBomAccessory} onUpdateItem={updateBomItem} onRemoveItem={removeBomItem} onExportProject={downloadBomProject} />}
       {modelMenuCategoryId && <ModelBrowserModal category={categoryForBrand(activeBrandId, modelMenuCategoryId)} products={modelMenuProducts} seriesName={modelMenuFastechSeries} onClose={() => { setModelMenuCategoryId(null); setModelMenuFastechSeries(null) }} onSelect={(product, fastechVariantId) => { const returnCategoryId = modelMenuCategoryId; setModelMenuCategoryId(null); openDetail(product, 'manual', returnCategoryId, fastechVariantId ?? null) }} />}
-      {selected && <DetailModal product={selected} favorite={favorites.includes(selected.id)} compared={comparison.includes(selected.id)} initialTab={detailTab} initialFastechVariantId={detailFastechVariantId ?? undefined} onClose={closeDetail} onBackToModels={detailReturnCategoryId ? returnToModelList : undefined} onFavorite={toggleFavorite} onCompare={toggleCompare} onShare={shareModel} onDownloadSpecPdf={downloadModelSpecPdf} pdfDownloadPending={modelPdfPendingId === selected.id} onOpenOfficial={openOfficial} onOpenDrive={openDriveOfficial} selectedDriveKey={drivePairings[selected.id]} onSelectDrive={selectDrivePairing} onCopyPairing={copyDrivePairing} onAddToBom={addDrivePairingToBom} onOpenManual={openManual} onOpenDrawing={openDrawing} />}
+      {selected && <DetailModal product={selected} favorite={favorites.includes(selected.id)} compared={comparison.includes(selected.id)} initialTab={detailTab} initialFastechVariantId={detailFastechVariantId ?? undefined} onClose={closeDetail} onBackToModels={detailReturnCategoryId ? returnToModelList : undefined} onFavorite={toggleFavorite} onCompare={toggleCompare} onShare={shareModel} onOpenOfficial={openOfficial} onOpenDrive={openDriveOfficial} selectedDriveKey={drivePairings[selected.id]} onSelectDrive={selectDrivePairing} onCopyPairing={copyDrivePairing} onOpenManual={openManual} onOpenDrawing={openDrawing} />}
       {notice && <div className="toast" role="status"><Icon name="spark" size={17} />{notice}</div>}
     </div>
   )

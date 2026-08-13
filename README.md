@@ -10,8 +10,7 @@ KINCO, ROBOTIS DYNAMIXEL, LS메카피온, KOMOTEK의 모터·액추에이터를 
 
 `main` 브랜치에 푸시될 때마다 GitHub Actions(`.github/workflows/deploy-pages.yml`)가 자동으로 빌드·배포합니다. 서버가 없는 정적 사이트이므로 아래 기능은 이 주소에서 지원되지 않고 안내 메시지만 표시됩니다(2번 PC 로컬 실행에서만 가능).
 
-- 모델 사양 PDF 카드 / 선정 결과 PDF 보고서 다운로드
-- 비교표 · 프로젝트 BOM 엑셀 다운로드
+- 비교표 엑셀 다운로드
 - 공식 매뉴얼 PDF · 도면 ZIP 열기
 
 ### 2) PC 로컬 실행 — 위 기능 전체 포함
@@ -41,7 +40,7 @@ npm run dev:lan
 - 모델 선택 시 공식 원문 매뉴얼·다운로드와 한글 요약 번역 안내 제공
 - 즐겨찾기와 최근 확인 모델의 브라우저 로컬 저장
 - `Ctrl/Cmd + K` 빠른 검색, PWA 설치용 매니페스트·오프라인 셸
-- NanumGothic 400/700 로컬 번들
+- Pretendard Variable 로컬 번들 (네트워크 글꼴에 의존하지 않음)
 
 ## 데이터 관리
 

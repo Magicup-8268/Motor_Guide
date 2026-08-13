@@ -16,8 +16,6 @@ const manifestPath = new URL('../public/manifest.webmanifest', import.meta.url)
 const mainPath = new URL('../src/main.tsx', import.meta.url)
 const serviceWorkerPath = new URL('../public/sw.js', import.meta.url)
 const mobileLauncherPath = new URL('../휴대폰용_실행.cmd', import.meta.url)
-const modelSpecPdfGeneratorPath = new URL('../scripts/generate_model_spec_pdf.py', import.meta.url)
-const selectionReportPdfGeneratorPath = new URL('../scripts/generate_selection_report_pdf.py', import.meta.url)
 const selectionFiltersPath = new URL('../src/utils/selectionFilters.ts', import.meta.url)
 const fastechVariantsPath = new URL('../src/data/fastechVariants.ts', import.meta.url)
 
@@ -308,23 +306,18 @@ test('external brands use manufacturer-specific category language in cards, sele
 })
 
 test('power filtering expands beyond 1 kW for published LS Mecapion and KOMOTEK family ranges', async () => {
-  const [app, viteConfig] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(viteConfigPath, 'utf8'),
-  ])
+  const app = await readFile(appPath, 'utf8')
 
   assert.match(app, /const extendedPowerFloors = \[100, 400, 750, 1000, 3000, 7500, 15000, 40000, 100000, 800000\]/)
   assert.match(app, /function powerOptionsFor/)
   assert.match(app, /const directoryPowerChoices/)
   assert.match(app, /value <= 1_000_000/)
-  assert.match(viteConfig, /isNumberWithin\(criteria\.powerFloor, 0, 1_000_000\)/)
 })
 
 test('DYNAMIXEL X catalog retains official voltage, stall torque, no-load speed, and bus distinctions', async () => {
-  const [externalCatalog, app, viteConfig, selectionFilters] = await Promise.all([
+  const [externalCatalog, app, selectionFilters] = await Promise.all([
     readFile(externalCatalogPath, 'utf8'),
     readFile(appPath, 'utf8'),
-    readFile(viteConfigPath, 'utf8'),
     readFile(selectionFiltersPath, 'utf8'),
   ])
 
@@ -347,19 +340,14 @@ test('DYNAMIXEL X catalog retains official voltage, stall torque, no-load speed,
   assert.match(app, /selectionManufacturer === 'robotis' \? '최소 공개 토크'/)
   assert.match(app, /query: 'XM430'/)
   assert.match(app, /selectionCapabilityValue\(product\)/)
-  assert.match(viteConfig, /\['all', '5v', '12v', '24v'/)
-  assert.match(viteConfig, /selectionCapabilityValue\(product\)/)
-  assert.match(viteConfig, /Nm 이상 공개 토크/)
-  assert.match(viteConfig, /label: '무부하 속도'/)
 })
 
 test('DYNAMIXEL catalog separates the Y, P, X, and MX actuator families with published selection data', async () => {
-  const [externalCatalog, app, styles, images, viteConfig, selectionFilters] = await Promise.all([
+  const [externalCatalog, app, styles, images, selectionFilters] = await Promise.all([
     readFile(externalCatalogPath, 'utf8'),
     readFile(appPath, 'utf8'),
     readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
     readFile(new URL('../src/data/productImages.ts', import.meta.url), 'utf8'),
-    readFile(viteConfigPath, 'utf8'),
     readFile(selectionFiltersPath, 'utf8'),
   ])
 
@@ -380,7 +368,6 @@ test('DYNAMIXEL catalog separates the Y, P, X, and MX actuator families with pub
   assert.match(selectionFilters, /export type SelectionProtocol = 'all' \| 'ethercat' \| 'canopen' \| 'modbus' \| 'profinet' \| 'pulse' \| 'ttl' \| 'rs485' \| 'uart'/)
   assert.match(app, /\{ value: 'rs485', label: 'RS-485' \}/)
   assert.match(app, /\{ value: 'uart', label: 'UART Half-Duplex' \}/)
-  assert.match(viteConfig, /'ttl', 'rs485', 'uart'/)
   assert.match(app, /const \[familyId, setFamilyId\] = useState\('all'\)/)
   assert.match(app, /className="family-filter"/)
   assert.match(styles, /\.family-filter \{ display: flex;/)
@@ -741,28 +728,6 @@ test('drawing ZIP coverage includes every catalog family with an official Kinco 
   assert.match(drawings, /archive\.modelPrefixes \|\| archive\.modelPrefixes\.some/)
 })
 
-test('individual model details can export a one-page Korean specification PDF card', async () => {
-  const [app, viteConfig, generator, styles] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(viteConfigPath, 'utf8'),
-    readFile(modelSpecPdfGeneratorPath, 'utf8'),
-    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
-  ])
-
-  assert.match(app, /const \[modelPdfPendingId, setModelPdfPendingId\] = useState<string \| null>\(null\)/)
-  assert.match(app, /new URL\('\/api\/model-spec-pdf', window\.location\.origin\)/)
-  assert.match(app, /className="button secondary pdf-download"/)
-  assert.match(app, /onDownloadSpecPdf=\{downloadModelSpecPdf\}/)
-  assert.match(viteConfig, /name: 'model-spec-pdf'/)
-  assert.match(viteConfig, /server\.middlewares\.use\('\/api\/model-spec-pdf'/)
-  assert.match(viteConfig, /buildModelSpecPdf/)
-  assert.match(viteConfig, /Content-Type', 'application\/pdf'/)
-  assert.match(generator, /from reportlab\.pdfgen import canvas/)
-  assert.match(generator, /NanumGothicBold/)
-  assert.match(generator, /pagesize=A4/)
-  assert.match(styles, /\.pdf-download \{/) 
-})
-
 test('condition-based selection shows every matching current motor across manufacturers with matching reasons', async () => {
   const [app, styles] = await Promise.all([
     readFile(appPath, 'utf8'),
@@ -778,6 +743,9 @@ test('condition-based selection shows every matching current motor across manufa
   // 조건에 해당하는 공개 수치가 없어 빠진 모델 수를 결과 머리말에 알려야 한다.
   assert.match(app, /const selectionUndisclosed = selectionMatchResult\.undisclosed \?\? 0/)
   assert.match(app, /선택한 조건의 공개 수치가 없는 \$\{selectionUndisclosed\}개 모델은 결과에서 빠졌습니다/)
+  // 화면은 조건 일치 모델 전체를 보여준다. 상위 3개만 추리던 동작은 PDF 보고서와 함께 제거되었다.
+  assert.match(app, /const selectionResults = selectionMatches/)
+  assert.doesNotMatch(app, /selectionMatches\.slice\(0, 3\)/)
   assert.match(app, /filter\(\(product\) => product\.lifecycle !== 'legacy'\)/)
   assert.match(app, /selectionManufacturer === 'all'/)
   assert.match(app, /product\.brand === manufacturerByBrandId\[selectionManufacturer\]/)
@@ -785,7 +753,6 @@ test('condition-based selection shows every matching current motor across manufa
   assert.match(app, /supportsSelectionVoltage\(product, selectionVoltage\)/)
   assert.match(app, /supportsSelectionProtocol\(product, selectionProtocol\)/)
   assert.match(app, /const selectionResults = selectionMatches/)
-  assert.match(app, /const selectionReportResults = selectionMatches\.slice\(0, 3\)/)
   assert.match(app, /function selectionReasons/)
   assert.match(app, /className="selection-assistant"/)
   assert.match(app, /className="selection-result-grid"/)
@@ -872,19 +839,6 @@ test('selection filters validate every registered model against normalized publi
   }
 })
 
-test('selection report keeps a concise top-three summary while the screen shows all matching motors', async () => {
-  const [app, viteConfig] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(viteConfigPath, 'utf8'),
-  ])
-
-  assert.match(app, /recommendedIds: selectionReportResults\.map\(\(product\) => product\.id\)/)
-  assert.match(viteConfig, /recommendedIds\?: string\[\]/)
-  assert.match(viteConfig, /const requestedRecommendationIds = \[\.\.\.new Set\(request\.recommendedIds \?\? \[\]\)\]/)
-  assert.match(viteConfig, /const recommendations = requestedRecommendations\.length \? requestedRecommendations : selectionReportMatches/)
-  assert.match(viteConfig, /function selectionReportMatches\(criteria: SelectionReportCriteria\)/)
-})
-
 test('selection conditions can be saved locally, restored, and shared as a portable link', async () => {
   const [app, styles] = await Promise.all([
     readFile(appPath, 'utf8'),
@@ -935,28 +889,6 @@ test('advanced drive calculator is removed from the motor selection workflow', a
   assert.match(styles, /\.sizing-output \{/) 
 })
 
-test('selection results export a two-page PDF report with candidates, comparison, and memo', async () => {
-  const [app, viteConfig, generator, styles] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(viteConfigPath, 'utf8'),
-    readFile(selectionReportPdfGeneratorPath, 'utf8'),
-    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
-  ])
-
-  assert.match(app, /const \[selectionReportPending, setSelectionReportPending\] = useState\(false\)/)
-  assert.match(app, /const downloadSelectionReport = async \(\) =>/)
-  assert.match(app, /new URL\('\/api\/selection-report-pdf', window\.location\.origin\)/)
-  assert.match(app, /className="selection-report"/)
-  assert.match(viteConfig, /name: 'selection-report-pdf'/)
-  assert.match(viteConfig, /server\.middlewares\.use\('\/api\/selection-report-pdf'/)
-  assert.match(viteConfig, /function selectionReportPayload/)
-  assert.doesNotMatch(viteConfig, /function selectionReportSizing|SelectionReportSizingInput/)
-  assert.match(generator, /MOTOR SELECTION REPORT/)
-  assert.match(generator, /NanumGothicBold/)
-  assert.match(generator, /PAGE \{page_number\} \/ 2/)
-  assert.match(styles, /\.selection-report \{/) 
-})
-
 test('external-drive matching separates integrated systems, published-spec candidates, and confirmation-needed products', async () => {
   const [app, drives, styles] = await Promise.all([
     readFile(appPath, 'utf8'),
@@ -1001,34 +933,6 @@ test('a motor and driver candidate can be confirmed locally, restored, and copie
   assert.match(styles, /\.drive-pairing-summary \{/)
 })
 
-test('project BOMs retain procurement fields, accept motor-drive configurations, and export a purchase workbook', async () => {
-  const [app, viteConfig, workbook, styles] = await Promise.all([
-    readFile(appPath, 'utf8'),
-    readFile(viteConfigPath, 'utf8'),
-    readFile(new URL('../tmp/xlsx-runtime/comparisonWorkbook.mjs', import.meta.url), 'utf8'),
-    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
-  ])
-
-  assert.match(app, /bomProjects: 'motor-atlas:bom-projects:v1'/)
-  assert.match(app, /activeBomProject: 'motor-atlas:active-bom-project:v1'/)
-  assert.match(app, /function loadBomProjects/)
-  assert.match(app, /function BomProjectModal/)
-  assert.match(app, /const addDrivePairingToBom = \(product: MotorProduct, item: DriveMatch\) =>/)
-  assert.match(app, /className="bom-open-button"/)
-  assert.match(app, /프로젝트 BOM 담기/)
-  assert.match(app, /new URL\('\/api\/project-bom-xlsx', window\.location\.origin\)/)
-  assert.match(app, /className="bom-table"/)
-  assert.match(viteConfig, /server\.middlewares\.use\('\/api\/project-bom-xlsx'/)
-  assert.match(viteConfig, /function isBomXlsxRequest/)
-  assert.match(viteConfig, /buildBomXlsx/)
-  assert.match(workbook, /export async function createBomWorkbook/)
-  assert.match(workbook, /export async function buildBomXlsx/)
-  assert.match(workbook, /Magicup-Work-Flow \| 프로젝트 BOM/)
-  assert.match(workbook, /SUMPRODUCT\(E\$\{firstDataRow\}:E\$\{lastDataRow\},G\$\{firstDataRow\}:G\$\{lastDataRow\}\)/)
-  assert.match(styles, /\.bom-modal \{/)
-  assert.match(styles, /\.bom-table \{/)
-})
-
 test('a selected FASTECH sub-model drives every detail panel with its own frame values instead of the family range', async () => {
   const vite = await createServer({ root: process.cwd(), appType: 'custom', server: { middlewareMode: true } })
 
@@ -1037,7 +941,7 @@ test('a selected FASTECH sub-model drives every detail panel with its own frame 
       vite.ssrLoadModule('/src/data/externalCatalog.ts'),
       vite.ssrLoadModule('/src/data/fastechVariants.ts'),
     ])
-    const [app, viteConfig] = await Promise.all([readFile(appPath, 'utf8'), readFile(viteConfigPath, 'utf8')])
+    const app = await readFile(appPath, 'utf8')
 
     const ethercat = externalMotors.find((product) => product.series === 'Ezi-SERVO II EtherCAT ALL')
     const stepBt = externalMotors.find((product) => product.series === 'Ezi-STEP BT')
@@ -1076,11 +980,7 @@ test('a selected FASTECH sub-model drives every detail panel with its own frame 
     assert.match(app, /const displayProduct: MotorProduct = selectedFastechVariant/)
     assert.match(app, /<ManualPanel product=\{displayProduct\}/)
     assert.match(app, /onShare\(displayProduct\)/)
-    assert.match(app, /onDownloadSpecPdf\(product, selectedFastechVariant\?\.id\)/)
-    assert.match(app, /downloadUrl\.searchParams\.set\('variant', fastechVariantId\)/)
     assert.match(app, /\['상전류', specs\.phaseCurrentText \?\? ''\]/)
-    assert.match(viteConfig, /requestParams\.get\('variant'\)/)
-    assert.match(viteConfig, /fastechVariantsFor\(product\)\.find\(\(item\) => item\.id === variantId\)/)
   } finally {
     await vite.close()
   }
