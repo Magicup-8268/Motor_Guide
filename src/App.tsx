@@ -140,6 +140,31 @@ const torqueOptions = [
   { value: 60, label: '60 Nm 이상 토크' },
 ]
 
+const extendedTorqueFloors = [0.05, 0.1, 0.2, 0.5, 1, 3, 5, 9, 15, 30, 60]
+
+/**
+ * 공개 토크 범위가 고정 목록과 크게 다른 제품군(예: 0.06–55 Nm의 브레이크)은
+ * 고정 목록을 그대로 쓰면 최소 옵션 아래 모델을 조건검색으로 찾을 수 없다.
+ * 그래서 실제 등록된 토크 범위 안쪽 구간만 남긴다.
+ * 목록보다 작거나 같은 하한은 '전체'와 결과가 같고, 최댓값보다 큰 하한은 결과가 비므로 제외한다.
+ */
+function torqueOptionsFor(products: MotorProduct[], brandId: BrandId | 'all') {
+  if (brandId !== 'mikipulley') return torqueOptions
+
+  const publishedTorques = products.map(selectionCapabilityValue).filter((value) => value > 0)
+  if (!publishedTorques.length) return torqueOptions
+
+  const minimum = Math.min(...publishedTorques)
+  const maximum = Math.max(...publishedTorques)
+  const basis = torqueBasisLabel(brandId)
+  return [
+    { value: 0, label: `${basis} 전체` },
+    ...extendedTorqueFloors
+      .filter((value) => value > minimum && value <= maximum)
+      .map((value) => ({ value, label: `${formatNumber(value)} Nm 이상 ${basis}` })),
+  ]
+}
+
 const dynamixelFamilyOrder = ['XW Series', 'XD Series', 'XH Series', 'XM Series', 'XC Series', 'XL Series', 'Y Series', 'P Series', 'MX Series', 'AX Series', 'EX Series', 'DX Series', 'RX Series', 'PRO Series']
 
 function compareDynamixelFamilies(left: string, right: string) {
@@ -194,8 +219,14 @@ function brandUsesTorque(brandId: BrandId | 'all') {
   return brandId === 'robotis' || brandId === 'fastech' || brandId === 'mikipulley'
 }
 
+function torqueBasisLabel(brandId: BrandId) {
+  if (brandId === 'fastech') return '홀딩 토크'
+  if (brandId === 'mikipulley') return '정지 마찰 토크'
+  return '공개 토크'
+}
+
 function torqueSelectionLabel(value: number, brandId: BrandId) {
-  const basis = brandId === 'fastech' ? '홀딩 토크' : brandId === 'mikipulley' ? '정지 마찰 토크' : '공개 토크'
+  const basis = torqueBasisLabel(brandId)
   return value === 0 ? `${basis} 전체` : `${formatNumber(value)} Nm 이상 ${basis}`
 }
 
@@ -458,7 +489,8 @@ function comparisonSourceLabel(product: MotorProduct) {
 
 function specsToRows(specs: MotorSpecs) {
   const rows: Array<[string, string]> = [
-    ['정격 전압', specs.ratedVoltage ?? specs.dcInputRange ?? ''],
+    // 브레이크는 제조사 사양표에서도 '코일 전압'으로 표기한다.
+    [specs.brakeAction ? '코일 전압' : '정격 전압', specs.ratedVoltage ?? specs.dcInputRange ?? ''],
     ['작동 방식', specs.brakeAction ?? ''],
     ['정지 마찰 토크', staticFrictionTorqueLabel(specs)],
     ['출력', ratedPowerLabel(specs)],
@@ -1526,14 +1558,14 @@ export default function App() {
   const selectionReportResults = selectionMatches.slice(0, 3)
   const currentSelectionCriteria: SelectionCriteria = { manufacturer: selectionManufacturer, categoryId: selectionCategoryId, voltage: selectionVoltage, powerFloor: selectionPowerFloor, protocol: selectionProtocol }
   const directoryPowerChoices = useMemo(() => {
-    const options = brandUsesTorque(activeBrandId) ? torqueOptions : powerOptionsFor(catalogMotors)
+    const options = brandUsesTorque(activeBrandId) ? torqueOptionsFor(catalogMotors, activeBrandId) : powerOptionsFor(catalogMotors)
     return options.some((option) => option.value === powerFloor)
       ? options
       : [...options, { value: powerFloor, label: `${selectionCapabilityLabel(powerFloor, activeBrandId)} (현재)` }]
   }, [activeBrandId, catalogMotors, powerFloor])
   const selectionPowerChoices = useMemo(() => {
     if (selectionManufacturer === 'all') return [{ value: 0, label: '제조사 선택 후 설정' }]
-    const options = brandUsesTorque(selectionManufacturer) ? torqueOptions : powerOptionsFor(selectionCandidateMotors)
+    const options = brandUsesTorque(selectionManufacturer) ? torqueOptionsFor(selectionCandidateMotors, selectionManufacturer) : powerOptionsFor(selectionCandidateMotors)
     return options.some((option) => option.value === selectionPowerFloor)
       ? options
       : [...options, { value: selectionPowerFloor, label: `${selectionCapabilityLabel(selectionPowerFloor, selectionManufacturer)} (현재 조건)` }]

@@ -1150,6 +1150,28 @@ test('Miki Pulley BXR spring-applied brakes are registered as brakes, not motors
 
     // Both hub styles are recorded on every frame size so the part number can be picked.
     assert.ok(brakes.every((product) => typeof product.specs.hubOptions === 'string' && product.specs.hubOptions.length > 0))
+
+    // Every brake must stay reachable from the torque filter. The shared 0.2 Nm floor
+    // would strand the 0.06 and 0.14 Nm BXR-LE frames, so the floors follow the published range.
+    const app = await readFile(appPath, 'utf8')
+    assert.match(app, /const extendedTorqueFloors = \[0\.05, 0\.1, 0\.2, 0\.5, 1, 3, 5, 9, 15, 30, 60\]/)
+    assert.match(app, /function torqueOptionsFor/)
+    assert.match(app, /torqueOptionsFor\(catalogMotors, activeBrandId\)/)
+    assert.match(app, /torqueOptionsFor\(selectionCandidateMotors, selectionManufacturer\)/)
+
+    const torques = brakes.map((product) => product.specs.staticFrictionTorque)
+    const smallest = Math.min(...torques)
+    const largest = Math.max(...torques)
+    const floors = [0.05, 0.1, 0.2, 0.5, 1, 3, 5, 9, 15, 30, 60].filter((value) => value > smallest && value <= largest)
+    assert.deepEqual(floors, [0.1, 0.2, 0.5, 1, 3, 5, 9, 15, 30])
+    // Each offered floor returns at least one brake, and the smallest frame is never stranded.
+    for (const floor of floors) {
+      assert.ok(brakes.some((product) => filters.selectionCapabilityValue(product) >= floor), `${floor} Nm 이상 조건에 해당하는 브레이크가 있어야 합니다.`)
+    }
+    assert.ok(smallest < floors[0], '최소 프레임은 하한 조건이 아니라 전체 조건으로만 도달합니다.')
+
+    // Brakes label their supply the way the manufacturer sheet does.
+    assert.match(app, /specs\.brakeAction \? '코일 전압' : '정격 전압'/)
   } finally {
     await vite.close()
   }
