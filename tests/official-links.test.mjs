@@ -1139,14 +1139,50 @@ test('Miki Pulley BXR spring-applied brakes are registered as brakes, not motors
       assert.ok(compatibility.checks.length > 0)
     }
 
-    // The 24 V standard-model coil supply stays filterable; BXR-LE has no published coil voltage yet.
+    // Both BXR and BXR-LE run on a 24 V coil supply, so both stay filterable.
     const bxr10 = brakes.find((product) => product.id === 'mikipulley-bxr-10')
     assert.equal(bxr10.specs.ratedVoltage, '24 VDC')
     assert.equal(filters.supportsSelectionVoltage(bxr10, '24v'), true)
     assert.equal(filters.supportsSelectionVoltage(bxr10, '48v'), false)
     assert.equal(bxr10.specs.maxSpeed, 5000)
-    assert.equal(bxr10.specs.coilResistance, '27 Ω')
-    assert.equal(bxr10.specs.boreRangeText, '24–28 mm (H7)')
+    for (const brake of brakes) {
+      assert.equal(filters.supportsSelectionVoltage(brake, '24v'), true, `${brake.model}은 24 V 조건에 포함되어야 합니다.`)
+    }
+
+    // Catalog values, not the product-page values. The web pages put the release time in the
+    // "Armature Pull-in Time" field and print a different total braking energy and spline mass.
+    assert.equal(bxr10.specs.coilResistance, '26.8 Ω')
+    assert.equal(bxr10.specs.coilPowerText, '21.5 W')
+    assert.equal(bxr10.specs.armaturePullInTime, '0.110 초')
+    assert.equal(bxr10.specs.armatureReleaseTime, '0.050 초')
+    assert.equal(bxr10.specs.totalBrakingEnergy, '2.2×10⁶ J')
+    assert.match(bxr10.specs.boreRangeText, /표준 24 mm/)
+
+    const bxr06 = brakes.find((product) => product.id === 'mikipulley-bxr-06')
+    assert.equal(bxr06.specs.armaturePullInTime, '0.050 초')
+    assert.equal(bxr06.specs.armatureReleaseTime, '0.020 초')
+    assert.equal(bxr06.specs.totalBrakingEnergy, '2.0×10⁶ J')
+    assert.match(bxr06.specs.hubOptions, /BXR-06-20-005 \(1\.1 kg\)/)
+
+    // BXR-LE needs its dedicated controller, and every frame shares the 35 ohm coil.
+    const bxrLe = brakes.filter((product) => product.series === 'BXR-LE')
+    assert.equal(bxrLe.length, 6)
+    for (const brake of bxrLe) {
+      assert.equal(brake.specs.coilResistance, '35 Ω')
+      assert.match(brake.specs.brakeController, /BEM-24ESN7-120N/)
+      assert.match(brake.specs.ratedVoltage, /24 VDC/)
+    }
+
+    // Backlash is published per hub style, so both figures must be recorded.
+    for (const brake of brakes.filter((product) => product.series === 'BXR')) {
+      assert.match(brake.specs.backlashText, /사각 허브.*스플라인 허브/)
+    }
+
+    // The new brake rows are rendered in the detail panel.
+    const appSource = await readFile(appPath, 'utf8')
+    for (const row of ['전용 컨트롤러', '코일 소비 전력', '해제 시간', '1회 허용 제동 일량']) {
+      assert.ok(appSource.includes(`['${row}'`), `상세 사양에 '${row}' 행이 있어야 합니다.`)
+    }
 
     // Both hub styles are recorded on every frame size so the part number can be picked.
     assert.ok(brakes.every((product) => typeof product.specs.hubOptions === 'string' && product.specs.hubOptions.length > 0))

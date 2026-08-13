@@ -94,12 +94,22 @@ export interface MotorSpecs {
   brakeAction?: string
   /** 아마추어 흡인 시간(초). 통전 후 제동이 풀리기까지의 시간. */
   armaturePullInTime?: string
-  /** 공개된 백래시 값. */
+  /** 아마추어 해제 시간(초). 전원 차단 후 제동이 걸리기까지의 시간. */
+  armatureReleaseTime?: string
+  /** 공개된 백래시 값(로터와 로터 허브 사이, 각도). */
   backlashText?: string
-  /** 총 제동 일량(J). */
+  /** 1회 허용 제동 일량(J). */
+  allowableBrakingEnergy?: string
+  /** 총 제동 일량(J). 마찰재 수명 기준 누적값. */
   totalBrakingEnergy?: string
   /** 코일 저항(Ω). */
   coilResistance?: string
+  /** 코일 소비 전력(W). */
+  coilPowerText?: string
+  /** 코일 전류(A). */
+  coilCurrentText?: string
+  /** 전용 컨트롤러 등 구동에 필요한 부속 기기. */
+  brakeController?: string
   /** 외경(A) 치수. */
   outerDiameterText?: string
   /** 볼트 원 지름(B) 치수. */
