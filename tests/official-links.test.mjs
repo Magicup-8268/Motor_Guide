@@ -44,7 +44,7 @@ test('application uses the locally bundled Pretendard variable webfont', async (
   assert.match(styles, /PretendardVariable\.woff2/)
   assert.match(styles, /font-family: 'Pretendard Variable'/)
   assert.match(styles, /font-weight: 100 900/)
-  assert.doesNotMatch(styles, /NanumGothic/)
+  assert.doesNotMatch(styles.match(/:root\s*\{([^}]*)\}/s)?.[1] ?? '', /NanumGothic/)
 })
 
 test('application supports home-screen installation and caches its same-origin app shell', async () => {

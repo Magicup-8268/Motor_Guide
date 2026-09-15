@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Icon } from './components/Icon'
+import { ProjectShelf } from './components/ProjectShelf'
+import type { SelectionProject } from './utils/projectSelections'
 import { drawingArchivesFor, type DrawingArchive } from './data/drawings'
 import { driveCompatibilityFor, type DriveMatch } from './data/drives'
 import { fastechVariantsFor, type FastechMotorVariant } from './data/fastechVariants'
@@ -684,7 +686,7 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
         <p className="product-card-summary">{product.summary}</p>
       </div>
       <div className="product-card-specs">
-        {power && <div className="product-card-power"><span>{filteredWatts.length ? '검색에 일치한 정격 출력' : isRobotis ? '전압 · 공개 토크' : isFastech ? '전압 · 홀딩 토크' : '전압 · 용량'}</span><strong>{filteredWatts.length ? `${specs.ratedVoltage ?? '전압 확인 필요'} · ${filteredWatts.map(w => `${formatNumber(w)} W`).join(' · ')}` : power}</strong></div>}
+        {power && <div className="product-card-power"><span>{filteredWatts.length ? '검색에 일치한 정격 출력' : isRobotis ? '전압 · 공개 토크' : isFastech ? '전압 · 홀딩 토크' : '전압 · 용량'}</span><strong>{filteredWatts.length ? `${specs.ratedVoltage ?? specs.dcInputRange ?? '전압 확인 필요'} · ${filteredWatts.map(w => `${formatNumber(w)} W`).join(' · ')}` : power}</strong></div>}
         {seriesOptions && filteredWatts.length > 0 && <small>시리즈 전체 출력: {ratedPowers(product).map(w => `${formatNumber(w)} W`).join(' · ')} · 선택 용량의 개별 토크·전류는 원문에서 확인하세요.</small>}
         {powerFilter && powerFilter.mode !== 'all' && <p className="rated-power-match">{powerFilter.mode === 'unknown' ? '정격 출력 미공개 · 추정값 제외' : `일치 정격 출력: ${matchingRatedPowers(product, powerFilter).map(value => `${formatNumber(value)} W`).join(' · ')}`}</p>}
         {isTorqueProduct && specs.torqueBasis && <div className="product-card-torque-basis"><span>토크 기준</span><strong>{specs.torqueBasis}</strong></div>}
@@ -1112,6 +1114,7 @@ function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownlo
       <div className="compare-tray-head">
         <div><p className="section-eyebrow">COMPARE / {products.length} OF 3</p><h2>선택 모델 비교</h2></div>
         <div className="compare-tray-actions">
+          <a className="project-shortcut" href="#projects" onClick={() => { onClose(); const shelf = document.querySelector<HTMLDetailsElement>('#projects'); if (shelf) shelf.open = true }}>프로젝트 선정함</a>
           <button className="comparison-export" onClick={() => onDownload(products)} disabled={downloadPending}>{downloadPending ? '엑셀 생성 중…' : '엑셀 다운로드'}</button>
           <button className="text-button comparison-close" onClick={onClose} aria-label="선택 모델 비교 닫기"><Icon name="x" size={14} />닫기</button>
           <button className="text-button" onClick={onClear}>모두 비우기</button>
@@ -1210,6 +1213,7 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isStandalone, setIsStandalone] = useState(isStandaloneMode)
   const searchInput = useRef<HTMLInputElement>(null)
+  const restoringProjectCategory = useRef(false)
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
   useEffect(() => { window.localStorage.setItem(storageKeys.favorites, JSON.stringify(favorites)) }, [favorites])
@@ -1292,7 +1296,10 @@ export default function App() {
   const directoryProducts = allBrands ? selectionProducts : individualMotors
   const usesTorque = !allBrands && (brandUsesTorque(activeBrandId) || categoryId === 'stepper')
   const capacityScope = directoryProducts.filter(product => categoryId === 'all' || product.categoryId === categoryId)
-  useEffect(() => setPowerFloor(0), [categoryId])
+  useEffect(() => {
+    if (!restoringProjectCategory.current) setPowerFloor(0)
+    restoringProjectCategory.current = false
+  }, [categoryId])
   const activeCategories = useMemo(() => categoriesForBrand(activeBrandId).filter((category) => catalogMotors.some((motor) => motor.categoryId === category.id)), [activeBrandId, catalogMotors])
   const categoryCounts = useMemo(() => Object.fromEntries(categories.map((category) => [category.id, individualMotors.filter((motor) => motor.categoryId === category.id).length])), [individualMotors])
   const robotisFamilies = useMemo(() => Array.from(new Set(catalogMotors.flatMap((motor) => motor.family ? [motor.family] : []))).sort(compareDynamixelFamilies), [catalogMotors])
@@ -1379,6 +1386,32 @@ export default function App() {
             ? [{ label: 'BXR', query: 'BXR' }, { label: 'BXR-LE', query: 'BXR-LE' }, { label: '무여자 작동형', query: '무여자 작동형' }]
         : [{ label: '48V 프레임리스', query: '48V 프레임리스' }, { label: '750W', query: '750W' }, { label: 'EtherCAT', query: 'EtherCAT' }]
   const comparisonProducts = comparison.map(resolveProduct).filter((product): product is MotorProduct => Boolean(product))
+  const projectModels = comparisonProducts.map(product => {
+    const compatibility = driveCompatibilityFor(product)
+    const integrated = compatibility.requirement === 'integrated' ? compatibility.matches[0] : undefined
+    return { id: product.id, model: product.model, brand: product.brand, drive: drivePairings[product.id] ?? (integrated ? driveMatchKey(integrated) : null) }
+  })
+  const restoreProject = (project: SelectionProject) => {
+    const c = project.conditions
+    restoringProjectCategory.current = c.categoryId !== categoryId
+    setQuery(c.query); setActiveBrandId(c.activeBrandId); setCategoryId(c.categoryId); setFamilyId(c.familyId)
+    setRobotisLineup(c.robotisLineup); setPowerFloor(c.powerFloor); setRatedPowerFilter(c.ratedPowerFilter)
+    setAllBrands(c.allBrands); setResultBrand(c.resultBrand); setOperatingPoint(c.operatingPoint)
+    setDirectoryVoltage(c.directoryVoltage); setDirectoryProtocol(c.directoryProtocol)
+    const available = project.models.filter(model => resolveProduct(model.id))
+    const restoredDrives = { ...drivePairings }
+    let invalidDrives = 0
+    for (const model of available) {
+      delete restoredDrives[model.id]
+      if (model.drive) {
+        const valid = driveCompatibilityFor(resolveProduct(model.id)!).matches.some(item => driveMatchKey(item) === model.drive)
+        if (valid) restoredDrives[model.id] = model.drive
+        else invalidDrives++
+      }
+    }
+    setDrivePairings(restoredDrives); setComparison(available.map(model => model.id)); setComparisonCollapsed(true)
+    return `불러오기 완료: ${available.length}개 제품 · 카탈로그 없음 ${project.models.length - available.length}개 · 재확인 필요 드라이브 ${invalidDrives}개. 저장 기록 자체는 유지됩니다. 검색 결과와 비교표를 확인하세요.`
+  }
   const favoriteProducts = favorites.map(resolveProduct).filter((product): product is MotorProduct => Boolean(product))
   const recentProducts = recents.map(resolveProduct).filter((product): product is MotorProduct => Boolean(product))
   const modelMenuProducts = modelMenuCategoryId
@@ -1639,6 +1672,8 @@ export default function App() {
             </button>)}
           </div>
         </section>
+
+        <ProjectShelf conditions={{ query, activeBrandId, categoryId, familyId, robotisLineup, powerFloor, ratedPowerFilter, allBrands, resultBrand, operatingPoint, directoryVoltage, directoryProtocol }} models={projectModels} onRestore={restoreProject} />
 
         <section className="directory-section" id="directory" aria-labelledby="directory-title">
           <div className="unified-search-controls" role="group" aria-label="검색 제조사 범위">
