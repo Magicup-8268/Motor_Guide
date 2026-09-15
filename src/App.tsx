@@ -1649,7 +1649,7 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Magicup-Work-Flow 처음으로">
-          <img className="brand-logo" src="/magicup-logo.svg" alt="Magicup 로고" />
+          <img className="brand-logo" src={`${import.meta.env.BASE_URL}magicup-logo.svg`} alt="Magicup 로고" />
           <span><strong>Magicup-Work-Flow</strong></span>
         </a>
         <div className={`top-actions ${!isStandalone ? 'has-install' : ''}`}>

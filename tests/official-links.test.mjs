@@ -27,7 +27,8 @@ test('Magicup logo and title brand the application shell', async () => {
     readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
   ])
 
-  assert.match(app, /className="brand-logo" src="\/magicup-logo\.svg"/)
+  assert.ok(app.includes('src={`${import.meta.env.BASE_URL}magicup-logo.svg`}'))
+  assert.doesNotMatch(app, /className="brand-logo" src="\/magicup-logo\.svg"/)
   assert.match(app, /Magicup-Work-Flow/)
   assert.doesNotMatch(app, /KINCO MOTOR GUIDE/)
   assert.match(index, /<title>Magicup-Work-Flow \| Kinco Motor Guide<\/title>/)
