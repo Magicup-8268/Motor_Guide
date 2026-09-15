@@ -15,9 +15,9 @@ import { matchesRatedPower, matchingRatedPowers, ratedPowers, powerFilterError, 
 import type { BrandId, CategoryId, MotorProduct, MotorSpecs } from './types'
 import { selectionCapabilityValue, supportsSelectionProtocol, supportsSelectionVoltage, type SelectionProtocol, type SelectionVoltage } from './utils/selectionFilters'
 
-// GitHub Pages 등 정적 호스팅에는 PDF/엑셀 생성용 Vite 서버 미들웨어가 없다.
-// 빌드 시 VITE_SERVER_API_AVAILABLE=false 를 주입하면 관련 기능을 안내 메시지로 대체한다.
-const SERVER_API_AVAILABLE = import.meta.env.VITE_SERVER_API_AVAILABLE !== 'false'
+// Static builds have no download proxy. XLSX is generated locally in the browser.
+const SERVER_API_AVAILABLE = import.meta.env.VITE_SERVER_API_AVAILABLE === 'true'
+  || (import.meta.env.DEV && import.meta.env.VITE_SERVER_API_AVAILABLE !== 'false')
 
 const storageKeys = {
   favorites: 'motor-atlas:favorites:v1',
@@ -663,6 +663,8 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
   const isRobotis = product.brand === 'ROBOTIS'
   const isFastech = product.brand === 'FASTECH' && !product.id.includes('::')
   const isTorqueProduct = isRobotis || isFastech
+  const seriesOptions = ratedPowers(product).length > 1
+  const filteredWatts = powerFilter && !['all', 'unknown'].includes(powerFilter.mode) ? matchingRatedPowers(product, powerFilter) : []
   return (
     <article className={`motor-card accent-${category.accent}`}>
       <button className="card-open-area" aria-label={`${product.model} ${isFastech ? '하위 모델 선택' : '상세 보기'}`} onClick={() => onSelect(product)} />
@@ -676,12 +678,14 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
         <div className="model-title-block">
           <p className="series-label"><strong className="manufacturer-badge">제조사 · {product.brand}</strong> · {product.series}{product.lifecycle && <span className={`product-lifecycle is-${product.lifecycle}`}>{product.lifecycle === 'legacy' ? '레거시 자료' : '현재 라인업'}</span>}</p>
           <h3>{product.model}</h3>
+          {seriesOptions && <p className="rated-power-match">시리즈 자료 · 개별 주문 모델 확인 필요</p>}
         </div>
         <ProductThumbnail product={product} />
         <p className="product-card-summary">{product.summary}</p>
       </div>
       <div className="product-card-specs">
-        {power && <div className="product-card-power"><span>{isRobotis ? '전압 · 공개 토크' : isFastech ? '전압 · 홀딩 토크' : '전압 · 용량'}</span><strong>{power}</strong></div>}
+        {power && <div className="product-card-power"><span>{filteredWatts.length ? '검색에 일치한 정격 출력' : isRobotis ? '전압 · 공개 토크' : isFastech ? '전압 · 홀딩 토크' : '전압 · 용량'}</span><strong>{filteredWatts.length ? `${specs.ratedVoltage ?? '전압 확인 필요'} · ${filteredWatts.map(w => `${formatNumber(w)} W`).join(' · ')}` : power}</strong></div>}
+        {seriesOptions && filteredWatts.length > 0 && <small>시리즈 전체 출력: {ratedPowers(product).map(w => `${formatNumber(w)} W`).join(' · ')} · 선택 용량의 개별 토크·전류는 원문에서 확인하세요.</small>}
         {powerFilter && powerFilter.mode !== 'all' && <p className="rated-power-match">{powerFilter.mode === 'unknown' ? '정격 출력 미공개 · 추정값 제외' : `일치 정격 출력: ${matchingRatedPowers(product, powerFilter).map(value => `${formatNumber(value)} W`).join(' · ')}`}</p>}
         {isTorqueProduct && specs.torqueBasis && <div className="product-card-torque-basis"><span>토크 기준</span><strong>{specs.torqueBasis}</strong></div>}
         {operatingPoint?.enabled && <div className="operating-point-result"><strong>{operatingPointStatus(product, operatingPoint).reason}</strong><p>요구: {operatingPoint.speed} rpm · 연속 {operatingPoint.torque} Nm</p><small>출력축 기준 · 전압·드라이브·냉각·듀티 및 공식 토크–속도 곡선 확인 후 선정</small></div>}
@@ -714,7 +718,7 @@ function ManualPanel({ product, onOpenManual, onOpenOfficial, onOpenDrawing }: {
         {manual ? <>
           <p className="section-eyebrow">{manual.fileExtension === 'zip' ? 'ORIGINAL MANUAL ARCHIVE' : 'ORIGINAL PDF'}</p>
           <h4>{product.brand} 공식 {manualFileLabel(manual)}</h4>
-          <p>버튼을 누르면 제조사 공식 다운로드 서버의 원문 PDF를 새 창으로 엽니다.</p>
+          <p>{SERVER_API_AVAILABLE ? '제조사 원문 파일을 새 창으로 엽니다.' : '온라인 정적 앱에서는 제조사 공식 자료실을 엽니다. 해당 문서명을 찾아 PDF 또는 ZIP을 선택하세요. 직접 다운로드 중계 서버는 연결되지 않았습니다.'}</p>
           <dl className="manual-source-list">
             <div><dt>문서명</dt><dd>{manual.title}</dd></div>
             <div><dt>문서 종류</dt><dd>{manualKindLabel(manual.kind)}</dd></div>
@@ -722,8 +726,9 @@ function ManualPanel({ product, onOpenManual, onOpenOfficial, onOpenDrawing }: {
             <div><dt>파일 크기</dt><dd>{manual.fileSize}</dd></div>
           </dl>
           <button className="button primary manual-open" onClick={() => onOpenManual(product)}>
-            원문 {manualFileLabel(manual)} 열기 <Icon name="arrow-up-right" size={17} />
+            {SERVER_API_AVAILABLE ? `원문 ${manualFileLabel(manual)} 열기` : '공식 매뉴얼 자료실 열기'} <Icon name="arrow-up-right" size={17} />
           </button>
+          <button className="button secondary" onClick={() => onOpenOfficial(product)}>파일이 열리지 않나요? 공식 제품 페이지 <Icon name="arrow-up-right" size={17} /></button>
         </> : <>
         <p className="section-eyebrow">ORIGINAL MANUAL</p>
         <h4>{product.brand} 공식 원문 · {product.series}</h4>
@@ -755,7 +760,7 @@ function ManualPanel({ product, onOpenManual, onOpenOfficial, onOpenDrawing }: {
         {drawings.length > 0 ? <div className="drawing-downloads">
             {drawings.map((drawing) => <button key={drawing.id} className="drawing-download" onClick={() => onOpenDrawing(product, drawing)}>
               <span><strong>{drawing.title}</strong><small>{drawing.updatedOn} (KST) · {drawing.fileSize}</small></span>
-              <span>{drawing.kind === 'page' ? '공식 도면·사양 열기' : 'DWG ZIP 다운로드'} <Icon name="arrow-up-right" size={17} /></span>
+              <span>{drawing.kind === 'page' ? '공식 도면·사양 열기' : SERVER_API_AVAILABLE ? 'DWG ZIP 다운로드' : '공식 도면 자료실 열기'} <Icon name="arrow-up-right" size={17} /></span>
             </button>)}
           </div> : <div className="drawing-unavailable">
             <p>이 제품은 현재 등록된 공식 Drawing ZIP이 없습니다. 제조사 제품 페이지 또는 자료실에서 도면 공개 여부를 확인하세요.</p>
@@ -1298,6 +1303,24 @@ export default function App() {
   const visibleMotorGroups = useMemo(() => !allBrands && activeBrandId === 'robotis' && familyId === 'all'
     ? robotisFamilies.map((family) => ({ family, products: visibleMotors.filter((product) => product.family === family) })).filter((group) => group.products.length > 0)
     : [], [allBrands, activeBrandId, familyId, robotisFamilies, visibleMotors])
+  const operatingGroups = operatingPoint.enabled ? [
+    { title: '정격 수치상 후보', status: 'candidate', note: '정격 수치 기준 예비 후보입니다. 실제 운전점 적합성은 공식 곡선 확인 전 미확인입니다.' },
+    { title: '자료 부족 · 적합성 미확인', status: 'review', note: '조건 일치를 확인하지 못한 제품입니다. 부적합 판정도 아닙니다. 카드별 부족한 근거를 확인하세요.' },
+  ].map(group => ({ ...group, products: visibleMotors.filter(product => operatingPointStatus(product, operatingPoint).status === group.status) })).filter(group => group.products.length) : []
+  const operatingExclusions = useMemo(() => {
+    if (!operatingPoint.enabled || operatingPointError(operatingPoint)) return []
+    const base = filterDirectoryProducts(directoryProducts, { categoryId, familyId, usesTorque, powerFloor, ratedPowerFilter, directoryVoltage, directoryProtocol, operatingPoint: { ...operatingPoint, enabled: false }, query })
+      .filter(product => !allBrands || resultBrand === 'all' || brandIdForProduct(product) === resultBrand)
+    const reasons = new Map<string, number>()
+    for (const product of base) {
+      const { status, reason } = operatingPointStatus(product, operatingPoint)
+      if (status === 'excluded' || (status === 'review' && !operatingPoint.includeUnknown)) {
+        const label = status === 'review' ? '자료 부족 포함 해제로 숨김 (부적합 아님)' : reason
+        reasons.set(label, (reasons.get(label) ?? 0) + 1)
+      }
+    }
+    return [...reasons]
+  }, [directoryProducts, categoryId, familyId, usesTorque, powerFloor, ratedPowerFilter, directoryVoltage, directoryProtocol, operatingPoint, query, allBrands, resultBrand])
   // 검색은 선택한 제조사 안에서만 돌기 때문에, 예를 들어 로보티즈를 보는 중에 "50W"를 찾으면
   // 킨코에 여섯 개가 있어도 0건으로 보인다. 결과가 없을 때 어느 제조사에 있는지 알려준다.
   const otherBrandHits = useMemo(() => {
@@ -1470,8 +1493,8 @@ export default function App() {
     const manual = manualPdfFor(product)
     if (!manual) return
     if (!SERVER_API_AVAILABLE) {
-      window.open(manual.url, '_blank', 'noopener,noreferrer')
-      setNotice('공식 원문을 엽니다. 제조사에서 직접 접속을 제한하면 공식 제품 페이지의 자료실을 이용하세요.')
+      window.open(manual.refererUrl || product.officialUrl, '_blank', 'noopener,noreferrer')
+      setNotice('직접 다운로드 중계가 없는 배포본입니다. 공식 자료실에서 표시된 문서명을 선택하세요.')
       return
     }
     setRecents((current) => [product.id, ...current.filter((id) => id !== product.id)].slice(0, 10))
@@ -1486,8 +1509,8 @@ export default function App() {
       return
     }
     if (!SERVER_API_AVAILABLE) {
-      window.open(drawing.url, '_blank', 'noopener,noreferrer')
-      setNotice('공식 도면을 엽니다. 직접 접속이 제한되면 공식 제품 페이지를 이용하세요.')
+      window.open(drawing.refererUrl || product.officialUrl, '_blank', 'noopener,noreferrer')
+      setNotice('공식 자료실에서 해당 도면 파일명을 선택하세요. 직접 ZIP 다운로드 중계는 연결되지 않았습니다.')
       return
     }
     const drawingUrl = new URL('/api/drawing-zip', window.location.origin)
@@ -1710,7 +1733,13 @@ export default function App() {
             </div>
             {activeBrand.officialUrl && <a href={activeBrand.officialUrl} target="_blank" rel="noreferrer">공식 e-Manual <Icon name="arrow-up-right" size={15} /></a>}
           </aside>}
-          {visibleMotorGroups.length > 0 ? <div className="motor-family-groups">
+          {operatingExclusions.length > 0 && <details className="search-evidence-summary"><summary>속도·토크 결과에서 제외되거나 숨겨진 이유 ({operatingExclusions.reduce((sum, [, count]) => sum + count, 0)}개)</summary><ul>{operatingExclusions.map(([reason, count]) => <li key={reason}>{reason} · {count}개</li>)}</ul><p>현재 검색어·제조사·전원·통신·출력·유형을 통과한 제품 기준입니다.</p></details>}
+          {operatingGroups.length > 0 ? <div className="motor-family-groups">
+            {operatingGroups.map(group => <section key={group.status} className="motor-family-group" aria-label={group.title}>
+              <div className="motor-family-group-head"><h3>{group.title}</h3><strong>{group.products.length}개</strong></div><p>{group.note}</p>
+              <div className="motor-grid">{group.products.map(product => <ProductCard key={product.id} product={product} powerFilter={ratedPowerFilter} operatingPoint={operatingPoint} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}</div>
+            </section>)}
+          </div> : visibleMotorGroups.length > 0 ? <div className="motor-family-groups">
             {visibleMotorGroups.map((group) => <section key={group.family} className="motor-family-group" aria-label={`${group.family} 모델`}>
               <div className="motor-family-group-head"><div><span>DYNAMIXEL FAMILY</span><h3>{group.family}</h3></div><strong>{group.products.length}개 모델</strong></div>
               <div className="motor-grid">{group.products.map((product) => <ProductCard key={product.id} product={product} powerFilter={ratedPowerFilter} operatingPoint={operatingPoint} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}</div>

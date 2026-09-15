@@ -527,7 +527,10 @@ test('manual PDF opening uses a local signed proxy for Kinco download hotlink pr
 
   assert.match(app, /new URL\('\/api\/manual-pdf', window\.location\.origin\)/)
   assert.match(app, /manualUrl\.searchParams\.set\('series', product\.series\)/)
-  assert.match(app, /window\.open\(manual\.url/)
+  assert.match(app, /window\.open\(manual\.refererUrl \|\| product\.officialUrl/)
+  assert.match(app, /window\.open\(drawing\.refererUrl \|\| product\.officialUrl/)
+  assert.doesNotMatch(app, /window\.open\(manual\.url/)
+  assert.match(app, /import\.meta\.env\.DEV && import\.meta\.env\.VITE_SERVER_API_AVAILABLE !== 'false'/)
   assert.match(manuals, /refererUrl: 'https:\/\/www\.kincoautomation\.com\/product\//)
   assert.match(viteConfig, /name: 'kinco-manual-pdf-proxy'/)
   assert.match(viteConfig, /Referer: file\.refererUrl/)

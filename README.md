@@ -8,10 +8,11 @@ KINCO, ROBOTIS DYNAMIXEL, LS메카피온, KOMOTEK의 모터·액추에이터를 
 
 <https://magicup-8268.github.io/Motor_Guide/>
 
-`main` 브랜치에 푸시될 때마다 GitHub Actions(`.github/workflows/deploy-pages.yml`)가 자동으로 빌드·배포합니다. 서버가 없는 정적 사이트이므로 아래 기능은 이 주소에서 지원되지 않고 안내 메시지만 표시됩니다(2번 PC 로컬 실행에서만 가능).
+`main` 브랜치에 푸시될 때마다 GitHub Actions(`.github/workflows/deploy-pages.yml`)가 자동으로 빌드·배포합니다. 공개 사이트이므로 로그인 없이 누구나 접속할 수 있습니다. 검토 브랜치 변경은 배포 승인 및 main 반영 전 이 주소에 적용되지 않습니다.
 
-- 비교표 엑셀 다운로드
-- 공식 매뉴얼 PDF · 도면 ZIP 열기
+- 비교표 엑셀 다운로드: 브라우저에서 생성하므로 정적 배포에서도 사용 가능합니다.
+- 공식 매뉴얼 PDF·도면 ZIP: 로컬 개발 서버에서는 다운로드 중계를 사용합니다. 정적 배포에서는 직접 접근 제한 오류를 피하도록 공식 자료실로 안내합니다. 클라우드 다운로드 중계는 아직 없습니다.
+- 정적 빌드에서 서버 API는 기본 비활성입니다. `VITE_SERVER_API_AVAILABLE=true`는 실제 같은 출처 `/api/manual-pdf`, `/api/drawing-zip` 서버가 구성된 배포에서만 사용하세요.
 
 ### 2) PC 로컬 실행 — 위 기능 전체 포함
 
