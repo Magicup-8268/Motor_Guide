@@ -674,3 +674,13 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 23px
 .rated-power-controls :focus-visible { outline: 3px solid #00C922; outline-offset: 3px; }
 .rated-power-filter p { margin: 10px 0 0; font-size: 14px; word-break: keep-all; overflow-wrap: break-word; }
 .rated-power-match { padding: 10px; border: 1px solid #009E1A; border-radius: 8px; color: #004C0C !important; background: #E8FFED; font-weight: 700; }
+.unified-search-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0; }
+.unified-search-controls button { min-height: 44px; padding: 10px 14px; border: 1px solid #009E1A; border-radius: 9px; background: #FFFFFF; color: #004C0C; font: inherit; cursor: pointer; }
+.unified-search-controls button[aria-pressed="true"] { background: #00F629; color: #000000; font-weight: 700; border-width: 2px; }
+.unified-search-controls :focus-visible, .check-control input:focus-visible { outline: 3px solid #00C922; outline-offset: 3px; }
+.unified-search-controls span { font-size: 14px; }
+.check-control { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+.check-control input { width: 20px; height: 20px; accent-color: #009E1A; flex-shrink: 0; }
+.operating-point-result { border: 1px solid #009E1A; border-radius: 10px; padding: 12px; background: #E8FFED; color: #004C0C; word-break: keep-all; overflow-wrap: break-word; }
+.operating-point-result p { margin: 8px 0; color: #004C0C; }
+.manufacturer-badge { display: inline-block; padding: 5px 9px; border: 1px solid #009E1A; border-radius: 7px; background: #E8FFED; color: #004C0C; font-size: 16px; letter-spacing: 0; }

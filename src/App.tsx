@@ -10,6 +10,7 @@ import { expandProducts, productForVariant, resolveProduct, selectionProducts } 
 import { normalizeSearch, queryTerms, containsSearchTerm } from './utils/search'
 import { buildComparisonXlsx } from './utils/comparisonXlsx'
 import { maxonSourceFor } from './data/motorManufacturer'
+import { operatingPointError, operatingPointStatus, matchesOperatingPoint, type OperatingPoint } from './utils/operatingPoint'
 import { matchesRatedPower, matchingRatedPowers, ratedPowers, powerFilterError, type PowerFilter, type PowerMode } from './data/ratedPowerFilter'
 import type { BrandId, CategoryId, MotorProduct, MotorSpecs } from './types'
 import { selectionCapabilityValue, supportsSelectionProtocol, supportsSelectionVoltage, type SelectionProtocol, type SelectionVoltage } from './utils/selectionFilters'
@@ -607,6 +608,7 @@ function categoryForProduct(product: MotorProduct) {
 }
 
 interface ProductCardProps {
+  operatingPoint?: OperatingPoint
   powerFilter?: PowerFilter
   product: MotorProduct
   favorite: boolean
@@ -651,7 +653,7 @@ function CategoryThumbnail({ categoryId, categoryName, brand }: { categoryId: Ca
   return <span className="category-card-thumbnail is-placeholder" role="img" aria-label={`${categoryName} 대표 제품 이미지 미공개`}><Icon name="spark" size={22} /></span>
 }
 
-function ProductCard({ product, favorite, compared, onSelect, onFavorite, onCompare, onOpenOfficial, powerFilter }: ProductCardProps) {
+function ProductCard({ product, favorite, compared, onSelect, onFavorite, onCompare, onOpenOfficial, powerFilter, operatingPoint }: ProductCardProps) {
   const category = categoryForProduct(product)
   const { specs } = product
   const power = modelPowerLabel(product)
@@ -672,7 +674,7 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
       </div>
       <div className="motor-card-copy">
         <div className="model-title-block">
-          <p className="series-label">{product.brand} · {product.series}{product.lifecycle && <span className={`product-lifecycle is-${product.lifecycle}`}>{product.lifecycle === 'legacy' ? '레거시 자료' : '현재 라인업'}</span>}</p>
+          <p className="series-label"><strong className="manufacturer-badge">제조사 · {product.brand}</strong> · {product.series}{product.lifecycle && <span className={`product-lifecycle is-${product.lifecycle}`}>{product.lifecycle === 'legacy' ? '레거시 자료' : '현재 라인업'}</span>}</p>
           <h3>{product.model}</h3>
         </div>
         <ProductThumbnail product={product} />
@@ -682,6 +684,7 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
         {power && <div className="product-card-power"><span>{isRobotis ? '전압 · 공개 토크' : isFastech ? '전압 · 홀딩 토크' : '전압 · 용량'}</span><strong>{power}</strong></div>}
         {powerFilter && powerFilter.mode !== 'all' && <p className="rated-power-match">{powerFilter.mode === 'unknown' ? '정격 출력 미공개 · 추정값 제외' : `일치 정격 출력: ${matchingRatedPowers(product, powerFilter).map(value => `${formatNumber(value)} W`).join(' · ')}`}</p>}
         {isTorqueProduct && specs.torqueBasis && <div className="product-card-torque-basis"><span>토크 기준</span><strong>{specs.torqueBasis}</strong></div>}
+        {operatingPoint?.enabled && <div className="operating-point-result"><strong>{operatingPointStatus(product, operatingPoint).reason}</strong><p>요구: {operatingPoint.speed} rpm · 연속 {operatingPoint.torque} Nm</p><small>출력축 기준 · 전압·드라이브·냉각·듀티 및 공식 토크–속도 곡선 확인 후 선정</small></div>}
         <div className="product-card-protocol"><span>통신 방식</span><strong>{communicationLabel(product)}</strong></div>
         <div className={`product-card-drive is-${driveCompatibility.requirement}`}><span>드라이브</span><strong>{driveCompatibility.badge}</strong></div>
         {needsFeatureSummary && <div className="product-card-feature"><span>핵심 특징</span><strong>{modelFeatureLabel(product)}</strong></div>}
@@ -1154,6 +1157,21 @@ function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownlo
   )
 }
 
+export function filterDirectoryProducts(products: MotorProduct[], criteria: {
+  categoryId: CategoryId | 'all'; familyId: string; usesTorque: boolean; powerFloor: number;
+  ratedPowerFilter: PowerFilter; directoryVoltage: SelectionVoltage; directoryProtocol: SelectionProtocol;
+  operatingPoint: OperatingPoint; query: string;
+}) {
+  const c = criteria
+  return matchesQuery(products.filter(product => (c.categoryId === 'all' || product.categoryId === c.categoryId)
+    && (c.familyId === 'all' || product.family === c.familyId)
+    && (!c.usesTorque || c.powerFloor === 0 || selectionCapabilityValue(product) >= c.powerFloor)
+    && matchesRatedPower(product, c.ratedPowerFilter)
+    && supportsSelectionVoltage(product, c.directoryVoltage)
+    && supportsSelectionProtocol(product, c.directoryProtocol)
+    && matchesOperatingPoint(product, c.operatingPoint)), c.query)
+}
+
 export default function App() {
   const [query, setQuery] = useState('')
   const [activeBrandId, setActiveBrandId] = useState<BrandId>(() => {
@@ -1165,6 +1183,9 @@ export default function App() {
   const [robotisLineup, setRobotisLineup] = useState<RobotisLineup>('current')
   const [powerFloor, setPowerFloor] = useState(0)
   const [ratedPowerFilter, setRatedPowerFilter] = useState<PowerFilter>({ mode: 'all', from: '', to: '' })
+  const [allBrands, setAllBrands] = useState(true)
+  const [resultBrand, setResultBrand] = useState<BrandId | 'all'>('all')
+  const [operatingPoint, setOperatingPoint] = useState<OperatingPoint>({ enabled: false, speed: '', torque: '', includeUnknown: true })
   const [directoryVoltage, setDirectoryVoltage] = useState<SelectionVoltage>('all')
   const [directoryProtocol, setDirectoryProtocol] = useState<SelectionProtocol>('all')
   const [favorites, setFavorites] = useState<string[]>(() => loadStringList(storageKeys.favorites))
@@ -1263,43 +1284,38 @@ export default function App() {
     ? brandMotors
     : brandMotors.filter((product) => robotisLineup === 'legacy' ? product.lifecycle === 'legacy' : product.lifecycle !== 'legacy'), [activeBrandId, brandMotors, robotisLineup])
   const individualMotors = useMemo(() => expandProducts(catalogMotors), [catalogMotors])
-  const usesTorque = brandUsesTorque(activeBrandId) || categoryId === 'stepper'
-  const capacityScope = individualMotors.filter(product => categoryId === 'all' || product.categoryId === categoryId)
+  const directoryProducts = allBrands ? selectionProducts : individualMotors
+  const usesTorque = !allBrands && (brandUsesTorque(activeBrandId) || categoryId === 'stepper')
+  const capacityScope = directoryProducts.filter(product => categoryId === 'all' || product.categoryId === categoryId)
   useEffect(() => setPowerFloor(0), [categoryId])
   const activeCategories = useMemo(() => categoriesForBrand(activeBrandId).filter((category) => catalogMotors.some((motor) => motor.categoryId === category.id)), [activeBrandId, catalogMotors])
   const categoryCounts = useMemo(() => Object.fromEntries(categories.map((category) => [category.id, individualMotors.filter((motor) => motor.categoryId === category.id).length])), [individualMotors])
   const robotisFamilies = useMemo(() => Array.from(new Set(catalogMotors.flatMap((motor) => motor.family ? [motor.family] : []))).sort(compareDynamixelFamilies), [catalogMotors])
-  const visibleMotors = useMemo(() => {
-    const narrowed = individualMotors
-      .filter((product) => categoryId === 'all' || product.categoryId === categoryId)
-      .filter((product) => familyId === 'all' || product.family === familyId)
-      .filter((product) => !usesTorque || powerFloor === 0 || selectionCapabilityValue(product) >= powerFloor)
-      .filter((product) => matchesRatedPower(product, ratedPowerFilter))
-      .filter((product) => supportsSelectionVoltage(product, directoryVoltage))
-      .filter((product) => supportsSelectionProtocol(product, directoryProtocol))
-    return matchesQuery(narrowed, query).sort((a, b) => b.weight - a.weight)
-  }, [individualMotors, usesTorque, categoryId, directoryProtocol, directoryVoltage, familyId, powerFloor, ratedPowerFilter, query])
-  const visibleMotorGroups = useMemo(() => activeBrandId === 'robotis' && familyId === 'all'
+  const matchedMotors = useMemo(() => {
+    return filterDirectoryProducts(directoryProducts, { categoryId, familyId, usesTorque, powerFloor, ratedPowerFilter, directoryVoltage, directoryProtocol, operatingPoint, query }).sort((a, b) => b.weight - a.weight)
+  }, [directoryProducts, usesTorque, categoryId, directoryProtocol, directoryVoltage, familyId, powerFloor, ratedPowerFilter, operatingPoint, query])
+  const visibleMotors = useMemo(() => allBrands && resultBrand !== 'all' ? matchedMotors.filter(product => brandIdForProduct(product) === resultBrand) : matchedMotors, [allBrands, resultBrand, matchedMotors])
+  const visibleMotorGroups = useMemo(() => !allBrands && activeBrandId === 'robotis' && familyId === 'all'
     ? robotisFamilies.map((family) => ({ family, products: visibleMotors.filter((product) => product.family === family) })).filter((group) => group.products.length > 0)
-    : [], [activeBrandId, familyId, robotisFamilies, visibleMotors])
+    : [], [allBrands, activeBrandId, familyId, robotisFamilies, visibleMotors])
   // 검색은 선택한 제조사 안에서만 돌기 때문에, 예를 들어 로보티즈를 보는 중에 "50W"를 찾으면
   // 킨코에 여섯 개가 있어도 0건으로 보인다. 결과가 없을 때 어느 제조사에 있는지 알려준다.
   const otherBrandHits = useMemo(() => {
-    if ((!query.trim() && ratedPowerFilter.mode === 'all') || visibleMotors.length > 0) return []
+    if (allBrands || (!query.trim() && ratedPowerFilter.mode === 'all') || visibleMotors.length > 0) return []
     return brandCatalogs
       .filter((brand) => brand.id !== activeBrandId)
       .map((brand) => ({
         id: brand.id,
         name: brand.name,
-        count: matchesQuery(selectionProducts.filter((product) => product.brand === manufacturerByBrandId[brand.id] && matchesRatedPower(product, ratedPowerFilter) && supportsSelectionVoltage(product, directoryVoltage) && supportsSelectionProtocol(product, directoryProtocol)), query).length,
+        count: filterDirectoryProducts(selectionProducts.filter(product => product.brand === manufacturerByBrandId[brand.id]), { categoryId, familyId, usesTorque, powerFloor, ratedPowerFilter, directoryVoltage, directoryProtocol, operatingPoint, query }).length,
       }))
       .filter((hit) => hit.count > 0)
-  }, [activeBrandId, query, visibleMotors.length, ratedPowerFilter, directoryVoltage, directoryProtocol])
+  }, [allBrands, activeBrandId, query, visibleMotors.length, ratedPowerFilter, directoryVoltage, directoryProtocol, categoryId, familyId, usesTorque, powerFloor, operatingPoint])
   // 전원·통신·용량 조건은 해당 값이 공개되지 않은 제품까지 함께 걸러낸다.
   // 안내가 없으면 카탈로그가 조용히 줄어든다(통신 조건은 전체 중 절반 이상이 정보 없음).
   const directoryUndisclosed = useMemo(() => {
     if (directoryVoltage === 'all' && directoryProtocol === 'all' && powerFloor === 0) return 0
-    return individualMotors
+    return directoryProducts
       .filter((product) => categoryId === 'all' || product.categoryId === categoryId)
       .filter((product) => {
         const missingVoltage = directoryVoltage !== 'all' && !supportsSelectionVoltage(product, directoryVoltage)
@@ -1309,24 +1325,24 @@ export default function App() {
         const missingCapacity = powerFloor > 0 && selectionCapabilityValue(product) < 0
         return missingVoltage || missingProtocol || missingCapacity
       }).length
-  }, [individualMotors, categoryId, directoryProtocol, directoryVoltage, powerFloor])
+  }, [directoryProducts, categoryId, directoryProtocol, directoryVoltage, powerFloor])
   const directoryPowerChoices = useMemo(() => {
     const options = usesTorque ? torqueOptionsFor(capacityScope, activeBrandId) : powerOptionsFor(capacityScope.filter(product => product.categoryId !== 'stepper'))
     return options.some((option) => option.value === powerFloor)
       ? options
       : [...options, { value: powerFloor, label: `${selectionCapabilityLabel(powerFloor, activeBrandId)} (현재)` }]
-  }, [activeBrandId, individualMotors, categoryId, usesTorque, powerFloor])
+  }, [activeBrandId, directoryProducts, categoryId, usesTorque, powerFloor])
   // 전원·통신 목록은 고정 목록이라 제조사를 좁히면 결과가 0건인 항목이 그대로 남았다.
   // (예: LS메카피온은 48 V만, 미키풀리는 24 V만 존재하고 통신은 아예 없다)
   // 실제로 결과가 있는 항목만 남기고, 현재 고른 값은 항상 유지한다.
   const directoryVoltageChoices = useMemo(() => selectionVoltageOptions.filter((option) => option.value === 'all'
     || option.value === directoryVoltage
     || capacityScope.some((product) => supportsSelectionVoltage(product, option.value))),
-  [individualMotors, categoryId, directoryVoltage])
+  [directoryProducts, categoryId, directoryVoltage])
   const directoryProtocolChoices = useMemo(() => selectionProtocolOptions.filter((option) => option.value === 'all'
     || option.value === directoryProtocol
     || capacityScope.some((product) => supportsSelectionProtocol(product, option.value))),
-  [individualMotors, categoryId, directoryProtocol])
+  [directoryProducts, categoryId, directoryProtocol])
 
   const searchExamples = activeBrandId === 'robotis'
     ? [{ label: 'XM430', query: 'XM430' }, { label: '4.1 Nm', query: '4.1 Nm' }, { label: 'RS-485', query: 'RS-485' }]
@@ -1362,6 +1378,8 @@ export default function App() {
   // 다른 제조사로 건너갈 때는 검색어를 남겨야 한다. 그러지 않으면 "이 제조사에 6개 있음"을
   // 눌러 이동한 순간 검색어가 지워져 방금 찾던 결과가 사라진다.
   const selectBrand = (brandId: BrandId, options?: { keepQuery?: boolean }) => {
+    setAllBrands(false)
+    setResultBrand('all')
     setActiveBrandId(brandId)
     setCategoryId('all')
     setFamilyId('all')
@@ -1572,7 +1590,7 @@ export default function App() {
             <p className="hero-description">{activeBrand.description}</p>
             <form className="search-box" onSubmit={submitSearch} role="search">
               <Icon name="search" size={22} />
-              <input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="모델명, 종류, 토크, 통신 방식 검색" aria-label={`${activeBrand.name} 모터 검색`} type="text" inputMode="search" enterKeyHint="search" autoComplete="off" spellCheck={false} />
+              <input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={allBrands ? '전체 제조사 · 모델명, 종류, 토크, 통신 방식 검색' : '모델명, 종류, 토크, 통신 방식 검색'} aria-label={allBrands ? '전체 제조사 모터 검색' : `${activeBrand.name} 모터 검색`} type="text" inputMode="search" enterKeyHint="search" autoComplete="off" spellCheck={false} />
               {query && <button type="button" className="clear-search" onClick={() => { setQuery(''); searchInput.current?.focus() }} aria-label="검색어 지우기"><Icon name="x" size={16} /></button>}
               <kbd>⌘ K</kbd>
             </form>
@@ -1590,7 +1608,7 @@ export default function App() {
         <section className="category-map" aria-labelledby="category-map-title">
           <div className="section-heading"><div><p className="section-eyebrow">MOTOR MAP</p><h2 id="category-map-title">어떤 구동 방식이 필요한가요?</h2></div><p>용도에서 시작해 사양으로 좁혀보세요.</p></div>
           <div className="category-grid">
-            {activeCategories.map((category) => <button key={category.id} className={`category-card accent-${category.accent} ${categoryId === category.id ? 'is-current' : ''}`} onClick={() => { setCategoryId(category.id); setFamilyId('all'); setModelMenuFastechSeries(null); setModelMenuCategoryId(category.id) }}>
+            {activeCategories.map((category) => <button key={category.id} className={`category-card accent-${category.accent} ${categoryId === category.id ? 'is-current' : ''}`} onClick={() => { setAllBrands(false); setResultBrand('all'); setCategoryId(category.id); setFamilyId('all'); setModelMenuFastechSeries(null); setModelMenuCategoryId(category.id) }}>
               <span className="category-card-index">0{activeCategories.indexOf(category) + 1}</span>
               <CategoryThumbnail categoryId={category.id} categoryName={category.name} brand={activeBrandId} />
               <span className="category-card-copy"><small>{category.eyebrow}</small><strong>{category.name}</strong><em>{category.useCase}</em></span>
@@ -1600,15 +1618,20 @@ export default function App() {
         </section>
 
         <section className="directory-section" id="directory" aria-labelledby="directory-title">
+          <div className="unified-search-controls" role="group" aria-label="검색 제조사 범위">
+            <button type="button" aria-pressed={allBrands} onClick={() => { setAllBrands(true); setResultBrand('all'); setCategoryId('all'); setFamilyId('all'); setPowerFloor(0) }}>전체 제조사 통합 검색</button>
+            <button type="button" aria-pressed={!allBrands} onClick={() => { setAllBrands(false); setResultBrand('all'); setCategoryId('all'); setFamilyId('all'); setPowerFloor(0) }}>{activeBrand.name}만 검색</button>
+            <span>{allBrands ? '전체 등록 제품 · 레거시 포함' : '선택한 제조사 라이브러리'} · 전원·통신·정격 출력 조건 동시 적용</span>
+          </div>
           <div className="directory-head">
             <div><p className="section-eyebrow">PRODUCT DIRECTORY</p><h2 id="directory-title">사양으로 비교할 모델 찾기</h2></div>
-            <p><strong>{visibleMotors.length}</strong>개 모델이 현재 조건에 맞습니다.{directoryUndisclosed > 0 ? ` 선택한 조건의 공개 수치가 없는 ${directoryUndisclosed}개 모델은 결과에서 빠졌습니다.` : ''}</p>
+            <p><strong>{visibleMotors.length}</strong>개 {operatingPoint.enabled ? '예비 검토 결과입니다. 최종 선정 확정이 아닙니다.' : '모델이 현재 조건에 맞습니다.'}{directoryUndisclosed > 0 ? ` 선택한 조건의 공개 수치가 없는 ${directoryUndisclosed}개 모델은 결과에서 빠졌습니다.` : ''}</p>
           </div>
           <div className="filter-row" aria-label="모델 필터">
             <div className="filter-label"><Icon name="sliders" size={18} /> 필터</div>
             <div className="filter-group">
-              <button className={categoryId === 'all' ? 'is-active' : ''} onClick={() => setCategoryId('all')}>전체 <span>{individualMotors.length}</span></button>
-              {activeCategories.map((category) => <button key={category.id} className={categoryId === category.id ? 'is-active' : ''} onClick={() => setCategoryId(category.id)}>{category.name}<span>{categoryCounts[category.id]}</span></button>)}
+              <button className={categoryId === 'all' ? 'is-active' : ''} onClick={() => setCategoryId('all')}>전체 <span>{directoryProducts.length}</span></button>
+              {(allBrands ? categories : activeCategories).map((category) => <button key={category.id} className={categoryId === category.id ? 'is-active' : ''} onClick={() => setCategoryId(category.id)}>{category.name}<span>{directoryProducts.filter(product => product.categoryId === category.id).length}</span></button>)}
             </div>
             {usesTorque && <div className="power-filter">
               <label htmlFor="power-select">{usesTorque ? (activeBrandId === 'mikipulley' ? '최소 정지 마찰 토크' : categoryId === 'stepper' || activeBrandId === 'fastech' ? '최소 홀딩 토크' : '최소 공개 토크') : '최소 출력'}</label>
@@ -1643,9 +1666,28 @@ export default function App() {
               <button type="button" onClick={() => setRatedPowerFilter({ mode: 'all', from: '', to: '' })}>출력 초기화</button>
             </div>
             <p id="rated-power-help" role="status">{powerFilterError(ratedPowerFilter) || '공식 정격 출력만 검색합니다. 범위는 양 끝값 포함 · 소비전력/추정 출력 제외 · 브레이크는 출력 검색 대상 아님'}</p>
-            <p>현재 제조사·유형의 정격 출력 미공개 {capacityScope.filter(product => product.categoryId !== 'brake' && ratedPowers(product).length === 0).length}개 · 시리즈는 확인된 출력 옵션 중 일치하는 값이 있을 때 표시합니다.</p>
+            <p>검색 범위·유형의 정격 출력 미공개 {capacityScope.filter(product => product.categoryId !== 'brake' && ratedPowers(product).length === 0).length}개 · 시리즈는 확인된 출력 옵션 중 일치하는 값이 있을 때 표시합니다.</p>
           </fieldset>
-          {activeBrandId === 'robotis' && robotisFamilies.length > 0 && <div className="family-filter" aria-label="DYNAMIXEL 제품군 필터">
+          <fieldset className="rated-power-filter operating-point-filter">
+            <legend>속도–연속 토크 동시 선정 (예비 검토)</legend>
+            <label className="check-control"><input type="checkbox" checked={operatingPoint.enabled} onChange={event => setOperatingPoint(current => ({ ...current, enabled: event.target.checked }))} />속도·토크 조건 사용</label>
+            {operatingPoint.enabled && <>
+              <div className="rated-power-controls">
+                <label>필요 속도 (rpm)<input type="number" min="0" step="any" inputMode="decimal" value={operatingPoint.speed} placeholder="예: 25" aria-describedby="operating-point-help" onChange={event => setOperatingPoint(current => ({ ...current, speed: event.target.value }))} /></label>
+                <label>필요 연속 토크 (Nm)<input type="number" min="0" step="any" inputMode="decimal" value={operatingPoint.torque} placeholder="예: 1" aria-describedby="operating-point-help" onChange={event => setOperatingPoint(current => ({ ...current, torque: event.target.value }))} /></label>
+                <button type="button" onClick={() => setOperatingPoint({ enabled: false, speed: '', torque: '', includeUnknown: true })}>속도·토크 초기화</button>
+              </div>
+              <label className="check-control"><input type="checkbox" checked={operatingPoint.includeUnknown} onChange={event => setOperatingPoint(current => ({ ...current, includeUnknown: event.target.checked }))} />정격 근거 부족 제품도 별도 미확인 표시로 포함</label>
+              <p id="operating-point-help" role="status">{operatingPointError(operatingPoint) || '선정 확정 아님: 모터/액추에이터 출력축 기준으로 입력하세요. 감속비 자동 환산 없음. 스톨·홀딩 토크 및 무부하 속도는 연속 운전 성능으로 인정하지 않습니다.'}</p>
+              <p>정격 수치상 후보도 실제 운전점 적합성은 미확인입니다. 동일 전압·냉각·듀티 조건의 공식 토크–속도 곡선과 드라이브를 확인하세요. 최대값을 초과하는 명확한 수치는 제외합니다.</p>
+              <p aria-live="polite">표시 결과: 정격 수치상 후보 {visibleMotors.filter(product => operatingPointStatus(product, operatingPoint).status === 'candidate').length}개 · 정격 근거 부족 {visibleMotors.filter(product => operatingPointStatus(product, operatingPoint).status === 'review').length}개</p>
+            </>}
+          </fieldset>
+          {allBrands && <div className="unified-search-controls" role="group" aria-label="제조사별 검색 결과">
+            <button aria-pressed={resultBrand === 'all'} onClick={() => setResultBrand('all')}>전체 결과 {matchedMotors.length}개</button>
+            {brandCatalogs.map(brand => <button key={brand.id} aria-pressed={resultBrand === brand.id} onClick={() => setResultBrand(brand.id)}>{brand.name} {matchedMotors.filter(product => brandIdForProduct(product) === brand.id).length}개</button>)}
+          </div>}
+          {!allBrands && activeBrandId === 'robotis' && robotisFamilies.length > 0 && <div className="family-filter" aria-label="DYNAMIXEL 제품군 필터">
             <strong>표시 범위</strong>
             <div>
               <button className={robotisLineup === 'current' ? 'is-active' : ''} onClick={() => { setRobotisLineup('current'); setFamilyId('all'); setCategoryId('all') }}>현재 라인업 <span>{brandMotors.filter((product) => product.lifecycle !== 'legacy').length}</span></button>
@@ -1653,14 +1695,14 @@ export default function App() {
               <button className={robotisLineup === 'all' ? 'is-active' : ''} onClick={() => { setRobotisLineup('all'); setFamilyId('all'); setCategoryId('all') }}>전체 <span>{brandMotors.length}</span></button>
             </div>
           </div>}
-          {activeBrandId === 'robotis' && robotisFamilies.length > 0 && <div className="family-filter" aria-label="DYNAMIXEL 제품군 필터">
+          {!allBrands && activeBrandId === 'robotis' && robotisFamilies.length > 0 && <div className="family-filter" aria-label="DYNAMIXEL 제품군 필터">
             <strong>제품군</strong>
             <div>
               <button className={familyId === 'all' ? 'is-active' : ''} onClick={() => setFamilyId('all')}>전체 <span>{catalogMotors.length}</span></button>
               {robotisFamilies.map((family) => <button key={family} className={familyId === family ? 'is-active' : ''} onClick={() => setFamilyId(family)}>{family}<span>{catalogMotors.filter((product) => product.family === family).length}</span></button>)}
             </div>
           </div>}
-          {activeBrandId === 'robotis' && <aside className="robotis-catalog-note" aria-label="DYNAMIXEL 카탈로그 기준 안내">
+          {!allBrands && activeBrandId === 'robotis' && <aside className="robotis-catalog-note" aria-label="DYNAMIXEL 카탈로그 기준 안내">
             <Icon name="spark" size={18} />
             <div>
               <strong>공식 DYNAMIXEL e-Manual 기준 · {robotisLineup === 'current' ? '현재 라인업 우선 표시' : robotisLineup === 'legacy' ? '레거시 공식 자료 표시' : '현재·레거시 전체 표시'}</strong>
@@ -1671,11 +1713,11 @@ export default function App() {
           {visibleMotorGroups.length > 0 ? <div className="motor-family-groups">
             {visibleMotorGroups.map((group) => <section key={group.family} className="motor-family-group" aria-label={`${group.family} 모델`}>
               <div className="motor-family-group-head"><div><span>DYNAMIXEL FAMILY</span><h3>{group.family}</h3></div><strong>{group.products.length}개 모델</strong></div>
-              <div className="motor-grid">{group.products.map((product) => <ProductCard key={product.id} product={product} powerFilter={ratedPowerFilter} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}</div>
+              <div className="motor-grid">{group.products.map((product) => <ProductCard key={product.id} product={product} powerFilter={ratedPowerFilter} operatingPoint={operatingPoint} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}</div>
             </section>)}
           </div> : <div className="motor-grid">
-            {visibleMotors.map((product) => <ProductCard key={product.id} product={product} powerFilter={ratedPowerFilter} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}
-            {visibleMotors.length === 0 && <div className="empty-state"><Icon name="search" size={28} /><h3>조건에 맞는 모델이 없습니다.</h3><p>{otherBrandHits.length > 0 ? '이 제조사에는 없지만 다른 제조사에 있습니다.' : '모델명 일부나 더 넓은 조건으로 다시 검색해보세요.'}</p>{otherBrandHits.length > 0 && <p className="empty-cross-brand">{otherBrandHits.map((hit) => <button key={hit.id} className="text-button" onClick={() => selectBrand(hit.id, { keepQuery: true })}>{hit.name} {hit.count}개</button>)}</p>}<button className="text-button" onClick={() => { setQuery(''); setCategoryId('all'); setFamilyId('all'); setRobotisLineup('current'); setPowerFloor(0); setRatedPowerFilter({ mode: 'all', from: '', to: '' }); setDirectoryVoltage('all'); setDirectoryProtocol('all') }}>필터 초기화</button></div>}
+            {visibleMotors.map((product) => <ProductCard key={product.id} product={product} powerFilter={ratedPowerFilter} operatingPoint={operatingPoint} favorite={favorites.includes(product.id)} compared={comparison.includes(product.id)} onSelect={openCatalogItem} onFavorite={toggleFavorite} onCompare={toggleCompare} onOpenOfficial={openOfficial} />)}
+            {visibleMotors.length === 0 && <div className="empty-state"><Icon name="search" size={28} /><h3>조건에 맞는 모델이 없습니다.</h3><p>{otherBrandHits.length > 0 ? '이 제조사에는 없지만 다른 제조사에 있습니다.' : '모델명 일부나 더 넓은 조건으로 다시 검색해보세요.'}</p>{otherBrandHits.length > 0 && <p className="empty-cross-brand">{otherBrandHits.map((hit) => <button key={hit.id} className="text-button" onClick={() => selectBrand(hit.id, { keepQuery: true })}>{hit.name} {hit.count}개</button>)}</p>}<button className="text-button" onClick={() => { setResultBrand('all'); setOperatingPoint({ enabled: false, speed: '', torque: '', includeUnknown: true }); setQuery(''); setCategoryId('all'); setFamilyId('all'); setRobotisLineup('current'); setPowerFloor(0); setRatedPowerFilter({ mode: 'all', from: '', to: '' }); setDirectoryVoltage('all'); setDirectoryProtocol('all') }}>필터 초기화</button></div>}
           </div>}
         </section>
 
@@ -1700,7 +1742,7 @@ export default function App() {
         {recentProducts.length > 0 && <section className="recent-section"><div className="section-heading"><div><p className="section-eyebrow">RECENTLY VIEWED</p><h2>최근 확인한 모델</h2></div><button className="text-button" onClick={() => setRecents([])}>기록 지우기</button></div><div className="recent-list">{recentProducts.slice(0, 4).map((product) => <button key={product.id} onClick={() => openDetail(product)}><span>{categoryForProduct(product).name}</span><strong>{product.model}</strong><Icon name="arrow-up-right" size={17} /></button>)}</div></section>}
 
         <section className="data-policy" aria-label="데이터 출처">
-          <p><strong>공식 데이터 기준</strong> · {`${activeBrand.name} 공식 제품 페이지와 공개 매뉴얼의 사양만 반영하며, 공개되지 않은 값은 추정하지 않습니다.`}</p>
+          <p><strong>공식 데이터 기준</strong> · {`${allBrands ? '각 제조사' : activeBrand.name} 공식 제품 페이지와 공개 매뉴얼의 사양만 반영하며, 공개되지 않은 값은 추정하지 않습니다.`}</p>
           {activeBrand.officialUrl && <a href={activeBrand.officialUrl} target="_blank" rel="noreferrer">{activeBrand.name} 공식 제품 센터 <Icon name="arrow-up-right" size={17} /></a>}
         </section>
       </main>
