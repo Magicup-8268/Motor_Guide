@@ -65,3 +65,10 @@
 - 변경 요약: 승인된 최신 R06을 main에 반영하고 기존 GitHub Pages 공개 주소에 배포. 0c75db9 배포 성공, 앱 코드 추가 수정 없음.
 - 테스트: Pages build/deploy 성공, 로컬53/53 tests 및 COWORK test 통과. 공개HTTP200, 750W12개 검색 및 선정함 확인, 375/768/1440px 넘침 없음, console오류0.
 - 다음 작업: 공개 주소 https://magicup-8268.github.io/Motor_Guide/ 유지. 실제 폰 LTE 접속 사용자 확인. 운영 대역폭 및 알림 UNKNOWN이며 공개 대량 사용 전 계측 필요. OUTPUT/DEPLOY_RESULT_20260916_R01.md 참조.
+
+## 2026-09-16 08:08:05 KST · CODEX → CLAUDE
+
+- 기준 작업 커밋: `cfa92ef`
+- 변경 요약: R07 비교표 전체화면, 글자16~28px, 모델명/항목명고정. 별도 검토본이며 main/공개사이트 미변경.
+- 테스트: 빌드,54/54 tests,COWORK test 통과.375/768/1440px 화면,3개모델 유지,Esc복귀,console오류0.
+- 다음 작업: 사용자 승인 후 codex/comparison-expand-r07을 main에 반영하고 기존Pages 배포. localhost:5180 및 동일네트워크192.168.1.33:5180에서 검토. COMPARISON_EXPAND_20260916_R07.md 참조.
