@@ -68,7 +68,7 @@ export function supportsSelectionProtocol(product: MotorProduct, selection: Sele
 
 export function selectionCapabilityUnit(product: MotorProduct): SelectionCapabilityUnit {
   // 브레이크는 출력(W)이 아니라 정지 마찰 토크(Nm)로 선정한다.
-  if (product.categoryId === 'brake') return 'torque'
+  if (product.categoryId === 'brake' || product.categoryId === 'stepper') return 'torque'
   return product.brand === 'ROBOTIS' || product.brand === 'FASTECH' ? 'torque' : 'power'
 }
 

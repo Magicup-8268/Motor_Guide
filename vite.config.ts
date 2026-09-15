@@ -1,11 +1,8 @@
 import OSS from 'ali-oss'
-import { resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { drawingArchivesBySeries } from './src/data/drawings'
 import { manualPdfBySeries } from './src/data/manuals'
-import { motors } from './src/data/motors'
 
 interface KincoToken {
   accessKeyId: string
@@ -20,22 +17,8 @@ interface KincoDownloadFile {
   refererUrl: string
 }
 
-interface ComparisonWorkbookBuilder {
-  buildComparisonXlsx: (products: typeof motors) => Promise<Uint8Array>
-}
-
-let comparisonWorkbookBuilder: Promise<ComparisonWorkbookBuilder> | undefined
-
-function getComparisonWorkbookBuilder() {
-  if (!comparisonWorkbookBuilder) {
-    const moduleUrl = pathToFileURL(resolve(process.cwd(), 'tmp/xlsx-runtime/comparisonWorkbook.mjs')).href
-    comparisonWorkbookBuilder = import(moduleUrl) as Promise<ComparisonWorkbookBuilder>
-  }
-  return comparisonWorkbookBuilder
-}
-
 async function retrieveKincoDownload(file: KincoDownloadFile) {
-  const tokenResponse = await fetch('https://www.kincoautomation.com/api/getToken')
+  const tokenResponse = await fetch('https://www.kincoautomation.com/api/getToken', { signal: AbortSignal.timeout(20_000) })
   const tokenPayload = await tokenResponse.json() as { code?: string; data?: KincoToken }
   if (!tokenResponse.ok || tokenPayload.code !== '000000' || !tokenPayload.data) throw new Error('Kinco temporary access token was unavailable')
 
@@ -51,20 +34,46 @@ async function retrieveKincoDownload(file: KincoDownloadFile) {
   })
   const objectPath = decodeURIComponent(new URL(file.url).pathname.slice(1))
   const signedUrl = client.signatureUrl(objectPath, { expires: 60 })
-  const downloadResponse = await fetch(signedUrl, { headers: { Referer: file.refererUrl } })
+  const downloadResponse = await fetch(signedUrl, { headers: { Referer: file.refererUrl }, signal: AbortSignal.timeout(60_000) })
   if (!downloadResponse.ok) throw new Error(`Kinco download response ${downloadResponse.status}`)
-  return new Uint8Array(await downloadResponse.arrayBuffer())
+  return checkedDocument(downloadResponse)
 }
 
 async function retrieveFastechDownload(file: KincoDownloadFile) {
   const downloadResponse = await fetch(file.url, {
+    signal: AbortSignal.timeout(60_000),
     headers: {
       Referer: file.refererUrl,
       Accept: 'application/pdf,application/zip,application/octet-stream;q=0.9,*/*;q=0.8',
     },
   })
   if (!downloadResponse.ok) throw new Error(`FASTECH download response ${downloadResponse.status}`)
-  return new Uint8Array(await downloadResponse.arrayBuffer())
+  return checkedDocument(downloadResponse)
+}
+
+export async function checkedDocument(response: Response) {
+  const maxBytes = 128 * 1024 * 1024
+  if (Number(response.headers.get('content-length')) > maxBytes) throw new Error('Document too large')
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('Empty document')
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      size += value.length
+      if (size > maxBytes) throw new Error('Document too large')
+      chunks.push(value)
+    }
+  } finally { await reader.cancel() }
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length }
+  const isPdf = new TextDecoder().decode(bytes.subarray(0, 1024)).includes('%PDF-')
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 3 && bytes[3] === 4
+  if (!isPdf && !isZip) throw new Error('Official server returned an error page instead of a document')
+  return bytes
 }
 
 function manualPdfProxy(): Plugin {
@@ -129,38 +138,6 @@ function manualPdfProxy(): Plugin {
         }
       })
 
-      server.middlewares.use('/api/comparison-xlsx', async (request, response, next) => {
-        if (request.method !== 'GET') return next()
-
-        const requestedIds = new URL(request.url ?? '', 'http://localhost').searchParams.getAll('id')
-        const requestedProducts = requestedIds
-          .map((id) => motors.find((product) => product.id === id))
-          .filter((product): product is typeof motors[number] => Boolean(product))
-
-        if (requestedProducts.length < 1 || requestedProducts.length > 3 || requestedProducts.length !== requestedIds.length) {
-          response.statusCode = 400
-          response.setHeader('Content-Type', 'text/plain; charset=utf-8')
-          response.end('Select one to three registered motor models before exporting.')
-          return
-        }
-
-        try {
-          const { buildComparisonXlsx } = await getComparisonWorkbookBuilder()
-          const xlsx = await buildComparisonXlsx(requestedProducts)
-          response.statusCode = 200
-          response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-          response.setHeader('Content-Length', String(xlsx.byteLength))
-          response.setHeader('Content-Disposition', 'attachment; filename="Magicup-Motor-Atlas-Comparison.xlsx"')
-          response.setHeader('Cache-Control', 'no-store')
-          response.setHeader('X-Content-Type-Options', 'nosniff')
-          response.end(xlsx)
-        } catch (error) {
-          console.error('Comparison XLSX export failed:', error)
-          response.statusCode = 500
-          response.setHeader('Content-Type', 'text/plain; charset=utf-8')
-          response.end('Comparison XLSX could not be created. Please try again shortly.')
-        }
-      })
     },
   }
 }

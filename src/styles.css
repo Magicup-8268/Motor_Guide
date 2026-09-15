@@ -655,3 +655,6 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 23px
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
  }
+@media (min-width: 761px) and (max-width: 900px) {
+  .model-menu-characteristics { grid-template-columns: minmax(0, 1fr); }
+}

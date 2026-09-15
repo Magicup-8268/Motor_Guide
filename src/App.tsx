@@ -2,17 +2,19 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Icon } from './components/Icon'
 import { drawingArchivesFor, type DrawingArchive } from './data/drawings'
 import { driveCompatibilityFor, type DriveMatch } from './data/drives'
-import { fastechVariantSpecs, fastechVariantsFor, type FastechMotorVariant } from './data/fastechVariants'
+import { fastechVariantsFor, type FastechMotorVariant } from './data/fastechVariants'
 import { manualFileLabel, manualKindLabel, manualPdfFor } from './data/manuals'
 import { brandCatalogs, categories, categoriesForBrand, categoryForBrand, motors, sourceLabel } from './data/motors'
 import { categoryProductImageFor, productImageFor } from './data/productImages'
+import { expandProducts, productForVariant, resolveProduct, selectionProducts } from './data/productSelections'
+import { normalizeSearch, queryTerms, containsSearchTerm } from './utils/search'
+import { buildComparisonXlsx } from './utils/comparisonXlsx'
 import type { BrandId, CategoryId, MotorProduct, MotorSpecs } from './types'
 import { selectionCapabilityValue, supportsSelectionProtocol, supportsSelectionVoltage, type SelectionProtocol, type SelectionVoltage } from './utils/selectionFilters'
 
 // GitHub Pages 등 정적 호스팅에는 PDF/엑셀 생성용 Vite 서버 미들웨어가 없다.
 // 빌드 시 VITE_SERVER_API_AVAILABLE=false 를 주입하면 관련 기능을 안내 메시지로 대체한다.
 const SERVER_API_AVAILABLE = import.meta.env.VITE_SERVER_API_AVAILABLE !== 'false'
-const SERVER_ONLY_NOTICE = 'PC 로컬 실행(npm run dev)에서만 지원되는 기능입니다. 온라인(GitHub Pages) 배포판에서는 사용할 수 없습니다.'
 
 const storageKeys = {
   favorites: 'motor-atlas:favorites:v1',
@@ -225,6 +227,8 @@ function searchFields(product: MotorProduct) {
     specs.continuousCurrent,
     specs.peakCurrent,
     specs.currentSummary,
+    specs.coilCurrentText,
+    specs.coilPowerText,
     ...powerSearchAliases(specs.ratedPower),
     ...(specs.ratedPowerOptions?.flatMap(powerSearchAliases) ?? []),
     specs.phase,
@@ -240,6 +244,8 @@ function searchFields(product: MotorProduct) {
     specs.holdingTorqueText,
     specs.staticFrictionTorque !== undefined ? `${specs.staticFrictionTorque} Nm` : undefined,
     specs.staticFrictionTorqueText,
+    specs.ratedSpeed !== undefined ? `${specs.ratedSpeed} rpm` : undefined,
+    specs.maxSpeed !== undefined ? `${specs.maxSpeed} rpm` : undefined,
     specs.phaseCurrentText,
     specs.inertiaText,
     specs.flangeText ?? (specs.flange !== undefined ? `${specs.flange} mm` : undefined),
@@ -249,15 +255,11 @@ function searchFields(product: MotorProduct) {
 
 /** 구분자를 지운 형태. "48V"로 입력해도 "48 VDC"를 찾게 해준다. */
 function squashForSearch(text: string) {
-  return text.toLocaleLowerCase().replace(/[^0-9a-z가-힣]+/g, '')
+  return normalizeSearch(text)
 }
 
 function searchTerms(query: string) {
-  return query
-    .toLocaleLowerCase()
-    .split(/\s+/)
-    .map((term) => term.replace(/[^0-9a-z가-힣]+/g, ''))
-    .filter(Boolean)
+  return queryTerms(query)
 }
 
 /**
@@ -273,29 +275,18 @@ function searchTerms(query: string) {
  * "30w"는 17건이 전부 오탐이었다. 앞자리에 다른 숫자가 붙지 않은 위치만 인정한다.
  */
 function fieldContainsTerm(field: string, term: string) {
-  if (!/^\d/.test(term)) return field.includes(term)
-
-  let from = 0
-  for (;;) {
-    const at = field.indexOf(term, from)
-    if (at === -1) return false
-    if (at === 0 || !/\d/.test(field[at - 1])) return true
-    from = at + 1
-  }
+  return containsSearchTerm(field, term)
 }
 
-function matchesQuery(products: MotorProduct[], query: string) {
+export function matchesQuery(products: MotorProduct[], query: string) {
   const terms = searchTerms(query)
   if (!terms.length) return products
 
   const squashedFieldsOf = (product: MotorProduct) => searchFields(product).map(squashForSearch)
-  const phrase = squashForSearch(query)
-  const phraseMatches = products.filter((product) => squashedFieldsOf(product).some((field) => fieldContainsTerm(field, phrase)))
-  if (phraseMatches.length) return phraseMatches
-
   return products.filter((product) => {
     const fields = squashedFieldsOf(product)
-    return terms.every((term) => fields.some((field) => fieldContainsTerm(field, term)))
+    const specFields = searchFields({ ...product, model: '', summary: '', tags: [], features: [] }).map(squashForSearch)
+    return terms.every((term) => (/^\d.*(?:nm|kw|w|v|vdc|vac|a|rpm|mm)$/.test(term) ? specFields : fields).some((field) => fieldContainsTerm(field, term)))
   })
 }
 
@@ -355,6 +346,8 @@ function maxSpeedLabel(specs: MotorSpecs) {
 }
 
 function currentSummaryLabel(specs: MotorSpecs) {
+  if (specs.coilCurrentText) return `코일 ${specs.coilCurrentText}`
+  if (specs.phaseCurrentText) return `상전류 ${specs.phaseCurrentText}`
   if (specs.currentSummary) return specs.currentSummary
   const rated = ratedCurrentLabel(specs)
   const maximum = maxCurrentLabel(specs)
@@ -365,6 +358,7 @@ function currentSummaryLabel(specs: MotorSpecs) {
 type ComparisonMetric = 'power' | 'rated-torque' | 'max-torque' | 'rated-speed' | 'max-speed' | 'voltage' | 'current' | 'encoder-brake' | 'protection'
 
 function comparisonUnavailableLabel(product: MotorProduct, metric: ComparisonMetric) {
+  if (product.categoryId === 'brake' && ['power', 'rated-speed', 'max-torque', 'encoder-brake'].includes(metric)) return '브레이크 해당 없음'
   const isMotorOnly = ['frameless', 'ac-servo', 'dc-servo', 'stepper'].includes(product.categoryId)
 
   if (product.categoryId === 'stepper') {
@@ -377,9 +371,9 @@ function comparisonUnavailableLabel(product: MotorProduct, metric: ComparisonMet
 
   if (metric === 'encoder-brake' && isMotorOnly) return '모터 단품 · 엔코더/브레이크는 옵션 또는 드라이브 조합'
   if (metric === 'protection' && isMotorOnly) return '공식 사양표에 보호·안전 항목 별도 미기재'
-  if (metric === 'current' && isMotorOnly) return '공식 사양표에 전류 수치 미공개'
-  if (metric === 'voltage' && isMotorOnly) return '공식 사양표에 정격 전압 수치 미공개'
-  return `공식 ${product.series} 사양표에 수치 미공개`
+  if (metric === 'current' && isMotorOnly) return '등록 자료에 전류 수치 없음 · 공식 확인 필요'
+  if (metric === 'voltage' && isMotorOnly) return '등록 자료에 정격 전압 수치 없음 · 공식 확인 필요'
+  return `${product.series} 등록 자료에 수치 없음 · 공식 확인 필요`
 }
 
 function comparisonValue(product: MotorProduct, metric: ComparisonMetric, value: string) {
@@ -501,21 +495,15 @@ function comparisonTorqueCapacity(product: MotorProduct) {
 }
 
 function comparisonConclusion(products: MotorProduct[]) {
-  const rankedByCapability = [...products].sort((left, right) => {
-    const outputDifference = maxRatedPower(right.specs) - maxRatedPower(left.specs)
-    if (outputDifference !== 0) return outputDifference
-    const torqueDifference = comparisonTorqueCapacity(right) - comparisonTorqueCapacity(left)
-    if (torqueDifference !== 0) return torqueDifference
-    return (right.specs.protocols?.length ?? 0) - (left.specs.protocols?.length ?? 0)
-  })
+  const rankedByCapability = products
   const primary = rankedByCapability[0]
   const primaryOutput = maxRatedPower(primary.specs)
   const primaryTorque = comparisonTorqueCapacity(primary)
   const primaryReason = primaryOutput >= 0
-    ? `공개된 최대 정격 출력 ${formatNumber(primaryOutput)} W로 비교 후보 중 출력 여유가 가장 큽니다.`
+    ? `공개된 최대 정격 출력 ${formatNumber(primaryOutput)} W입니다. 선택 순서상 첫 모델이며 부하 적합성 추천이 아닙니다.`
     : primaryTorque >= 0
-      ? `공개된 토크 ${formatNumber(primaryTorque)} Nm 기준으로 비교 후보 중 구동 여유가 가장 큽니다.`
-      : '현재 비교 후보 중 공개된 사양 항목을 우선 기준으로 확인할 모델입니다.'
+      ? `공개된 토크 ${formatNumber(primaryTorque)} Nm입니다. 정격·스톨·홀딩 토크의 기준을 확인하세요.`
+      : '선택 순서상 첫 모델입니다. 공개 사양을 비교하며 부하 적합성은 별도 확인해야 합니다.'
 
   const alternative = products
     .filter((product) => product.id !== primary.id)
@@ -528,12 +516,13 @@ function comparisonConclusion(products: MotorProduct[]) {
   const alternativeReason = alternative
     ? alternativeProtocols.length > 0
       ? `통신 방식 ${alternativeProtocols.join(' · ')}을 우선할 때 검토할 대안입니다.`
-      : `출력·토크 요구가 1순위보다 낮거나 다른 설치 조건일 때 검토할 대안입니다.`
+      : '다른 선택 모델입니다. 전원·토크 기준·설치 조건을 각각 확인하세요.'
     : ''
 
   const voltageValues = [...new Set(products.map((product) => voltageLabel(product)).filter(Boolean))]
   const protocolValues = [...new Set(products.map((product) => communicationLabel(product)))]
   const cautions: string[] = []
+  cautions.push('출력이나 토크 수치만으로 적합 제품을 결정하지 않습니다. 정격·스톨·홀딩·정지 마찰 토크는 서로 다른 기준입니다.')
   if (voltageValues.length > 1) cautions.push(`전원 조건이 다릅니다: ${voltageValues.join(' / ')}. 전원·드라이브 호환 조합을 먼저 고정하세요.`)
   if (protocolValues.length > 1) cautions.push('통신 방식이 서로 달라 제어기·PLC·드라이브의 실제 통신 옵션을 모델 코드 기준으로 확인해야 합니다.')
   if (!cautions.length) cautions.push('감속기 비율, 엔코더·브레이크 옵션, 가감속 부하 조건은 같은 시리즈라도 모델 코드별로 다시 확인해야 합니다.')
@@ -667,7 +656,7 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
   const hasPublishedProtocols = (specs.protocols?.length ?? 0) > 0
   const needsFeatureSummary = !power || !hasPublishedProtocols
   const isRobotis = product.brand === 'ROBOTIS'
-  const isFastech = product.brand === 'FASTECH'
+  const isFastech = product.brand === 'FASTECH' && !product.id.includes('::')
   const isTorqueProduct = isRobotis || isFastech
   return (
     <article className={`motor-card accent-${category.accent}`}>
@@ -864,26 +853,30 @@ interface ModelBrowserModalProps {
   category: ReturnType<typeof categoryFor>
   products: MotorProduct[]
   seriesName?: string | null
+  allowedIds?: string[]
   onClose: () => void
   onSelect: (product: MotorProduct, fastechVariantId?: string) => void
 }
 
-function ModelBrowserModal({ category, products, seriesName, onClose, onSelect }: ModelBrowserModalProps) {
+function ModelBrowserModal({ category, products, seriesName, allowedIds, onClose, onSelect }: ModelBrowserModalProps) {
   const [filter, setFilter] = useState('')
   const [familyId, setFamilyId] = useState('all')
   const shouldAutoFocusModelSearch = window.matchMedia('(min-width: 761px)').matches
-  const normalizedFilter = filter.trim().toLocaleLowerCase()
+  const matchingIds = new Set(matchesQuery(expandProducts(products), filter).map(product => product.id))
   const isDynamixelCatalog = products.every((product) => product.brand === 'ROBOTIS')
   const isFastechCatalog = products.length > 0 && products.every((product) => product.brand === 'FASTECH')
   const families = Array.from(new Set(products.flatMap((product) => product.family ? [product.family] : []))).sort(compareDynamixelFamilies)
   const visibleProducts = products
     .filter((product) => familyId === 'all' || product.family === familyId)
-    .filter((product) => !normalizedFilter || `${product.model} ${product.series} ${capacityLabel(product)} ${(product.specs.protocols ?? []).join(' ')} ${product.features.join(' ')}`.toLocaleLowerCase().includes(normalizedFilter))
+    .filter((product) => matchingIds.has(product.id) && (!allowedIds || allowedIds.includes(product.id)))
     .sort((a, b) => compareDynamixelFamilies(a.family ?? '', b.family ?? '') || maxRatedPower(b.specs) - maxRatedPower(a.specs) || a.model.localeCompare(b.model))
   const fastechVariants = products.flatMap((product) => fastechVariantsFor(product).map((variant) => ({ product, variant })))
-  const visibleFastechVariants = fastechVariants.filter(({ product, variant }) => !normalizedFilter || `${variant.model} ${product.series} ${product.specs.ratedVoltage ?? ''} ${variant.holdingTorque} Nm ${variant.phaseCurrent} A ${(product.specs.protocols ?? []).join(' ')} ${product.features.join(' ')}`.toLocaleLowerCase().includes(normalizedFilter))
+  const visibleFastechVariants = fastechVariants.filter(({ product, variant }) => {
+    const id = productForVariant(product, variant).id
+    return matchingIds.has(id) && (!allowedIds || allowedIds.includes(id))
+  })
   const menuTitle = seriesName ? `${seriesName} 모델 선택` : `${category.name} 모델 선택`
-  const menuCount = isFastechCatalog ? fastechVariants.length : products.length
+  const menuCount = isFastechCatalog ? visibleFastechVariants.length : visibleProducts.length
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -909,7 +902,7 @@ function ModelBrowserModal({ category, products, seriesName, onClose, onSelect }
         </div>}
         <div className="model-browser-list">
           {isFastechCatalog ? visibleFastechVariants.map(({ product, variant }: { product: MotorProduct; variant: FastechMotorVariant }) => {
-            const variantProduct = { ...product, model: variant.model, specs: fastechVariantSpecs(product, variant) }
+            const variantProduct = productForVariant(product, variant)
             const power = modelPowerLabel(variantProduct)
             return <button key={variant.id} className="model-menu-item" onClick={() => onSelect(product, variant.id)}>
               <span className="model-menu-main">
@@ -975,13 +968,13 @@ interface DetailModalProps {
 
 function DetailModal({ product, favorite, compared, initialTab, initialFastechVariantId, onClose, onBackToModels, onFavorite, onCompare, onShare, onOpenOfficial, onOpenDrive, selectedDriveKey, onSelectDrive, onCopyPairing, onOpenManual, onOpenDrawing }: DetailModalProps) {
   const category = categoryForProduct(product)
-  const fastechVariants = fastechVariantsFor(product)
+  const fastechVariants = product.id.includes('::') ? [] : fastechVariantsFor(product)
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab)
   const [selectedFastechVariantId, setSelectedFastechVariantId] = useState(initialFastechVariantId ?? fastechVariants[0]?.id ?? '')
   const selectedFastechVariant = fastechVariants.find((variant) => variant.id === selectedFastechVariantId) ?? fastechVariants[0]
   // Every panel below must describe the selected sub-model, not the family range.
   const displayProduct: MotorProduct = selectedFastechVariant
-    ? { ...product, model: selectedFastechVariant.model, specs: fastechVariantSpecs(product, selectedFastechVariant) }
+    ? productForVariant(product, selectedFastechVariant)
     : product
   const rows = specsToRows(displayProduct.specs)
 
@@ -1019,7 +1012,7 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
           <dl className="spec-list">
             {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
-          <DriveCompatibilityPanel product={product} onOpenDrive={onOpenDrive} selectedDriveKey={selectedDriveKey} onSelectDrive={onSelectDrive} onCopyPairing={onCopyPairing} />
+          <DriveCompatibilityPanel product={displayProduct} onOpenDrive={onOpenDrive} selectedDriveKey={selectedDriveKey} onSelectDrive={onSelectDrive} onCopyPairing={onCopyPairing} />
           <p className="source-note">{sourceLabel}. 값이 공개되지 않은 항목은 의도적으로 표시하지 않았습니다.</p>
           </> : <ManualPanel product={displayProduct} onOpenManual={onOpenManual} onOpenOfficial={onOpenOfficial} onOpenDrawing={onOpenDrawing} />}
         </div>
@@ -1027,10 +1020,10 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
           <button className="button secondary share-button" onClick={() => onShare(displayProduct)}>
             <Icon name="share" size={17} /> 사양 공유
           </button>
-          <button className={`button secondary ${favorite ? 'is-active' : ''}`} onClick={() => onFavorite(product.id)}>
+          <button className={`button secondary ${favorite ? 'is-active' : ''}`} onClick={() => onFavorite(displayProduct.id)}>
             <Icon name="bookmark" size={17} fill={favorite ? 'currentColor' : 'none'} /> {favorite ? '저장됨' : '즐겨찾기'}
           </button>
-          <button className={`button secondary ${compared ? 'is-active' : ''}`} onClick={() => onCompare(product.id)}>
+          <button className={`button secondary ${compared ? 'is-active' : ''}`} onClick={() => onCompare(displayProduct.id)}>
             <Icon name={compared ? 'check' : 'grid'} size={17} /> {compared ? '비교함에 담김' : '비교하기'}
           </button>
           <button className="button primary" onClick={() => onOpenOfficial(product)}>
@@ -1042,12 +1035,14 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
   )
 }
 
-function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownload, downloadPending }: { products: MotorProduct[]; onRemove: (id: string) => void; onClear: () => void; onClose: () => void; onOpen: (product: MotorProduct) => void; onDownload: (products: MotorProduct[]) => void; downloadPending: boolean }) {
-  const [showDifferencesOnly, setShowDifferencesOnly] = useState(false)
-  const conclusion = comparisonConclusion(products)
+export function comparisonRowsFor(products: MotorProduct[]) {
   const rows = [
     ['정격 출력', (product: MotorProduct) => comparisonValue(product, 'power', ratedPowerLabel(product.specs))],
-    ['정격 / 홀딩 토크', (product: MotorProduct) => comparisonValue(product, 'rated-torque', ratedTorqueLabel(product.specs) || (product.specs.holdingTorque !== undefined ? `${formatNumber(product.specs.holdingTorque)} Nm (홀딩)` : ''))],
+    ['정격 / 홀딩 / 정지 마찰 토크', (product: MotorProduct) => comparisonValue(product, 'rated-torque', staticFrictionTorqueLabel(product.specs) || ratedTorqueLabel(product.specs) || (product.specs.holdingTorque !== undefined ? `${formatNumber(product.specs.holdingTorque)} Nm (홀딩)` : ''))],
+    ['토크 기준', (product: MotorProduct) => product.specs.torqueBasis ?? '정격 토크 · 최대 토크 별도 확인'],
+    ['코일 전력', (product: MotorProduct) => product.specs.coilPowerText ?? '해당 없음'],
+    ['흡인 / 해제 시간', (product: MotorProduct) => [product.specs.armaturePullInTime, product.specs.armatureReleaseTime].filter(Boolean).join(' / ') || '해당 없음'],
+    ['허용 / 총 제동 일량', (product: MotorProduct) => [product.specs.allowableBrakingEnergy, product.specs.totalBrakingEnergy].filter(Boolean).join(' / ') || '해당 없음'],
     ['최대 토크', (product: MotorProduct) => comparisonValue(product, 'max-torque', maxTorqueLabel(product.specs))],
     ['정격 속도', (product: MotorProduct) => comparisonValue(product, 'rated-speed', ratedSpeedLabel(product.specs))],
     ['최대 속도', (product: MotorProduct) => comparisonValue(product, 'max-speed', maxSpeedLabel(product.specs))],
@@ -1064,9 +1059,15 @@ function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownlo
     ['핵심 특징', (product: MotorProduct) => modelFeatureLabel(product)],
     ['사양 출처 상태', (product: MotorProduct) => comparisonSourceLabel(product)],
   ] as const
-  const populatedRows = rows
-    .map(([label, render]) => {
-      const values = products.map((product) => render(product))
+  return rows.map(([label, render]) => ({ label, values: products.map(render) }))
+    .filter(row => row.values.some(value => value !== '해당 없음' && value !== '브레이크 해당 없음'))
+}
+
+function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownload, downloadPending }: { products: MotorProduct[]; onRemove: (id: string) => void; onClear: () => void; onClose: () => void; onOpen: (product: MotorProduct) => void; onDownload: (products: MotorProduct[]) => void; downloadPending: boolean }) {
+  const [showDifferencesOnly, setShowDifferencesOnly] = useState(false)
+  const conclusion = comparisonConclusion(products)
+  const populatedRows = comparisonRowsFor(products)
+    .map(({label, values}) => {
       return {
         label,
         values,
@@ -1100,7 +1101,7 @@ function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownlo
         <div className="comparison-conclusion-head"><span>SELECTION SUMMARY</span><small>공개 사양 기준의 빠른 검토 결과</small></div>
         <div className="comparison-conclusion-cards">
           <article>
-            <span>{products.length > 1 ? '1순위 · 출력/토크 여유' : '현재 후보'}</span>
+            <span>{products.length > 1 ? '비교 기준 모델 · 선정 순위 아님' : '현재 후보'}</span>
             <button className="comparison-conclusion-model" onClick={() => onOpen(conclusion.primary)}>{conclusion.primary.model}<Icon name="arrow-up-right" size={13} /></button>
             <p>{conclusion.primaryReason}</p>
           </article>
@@ -1224,7 +1225,7 @@ export default function App() {
       const sharedId = new URLSearchParams(window.location.hash.slice(1)).get('model')
       if (!sharedId) return
 
-      const product = motors.find((motor) => motor.id === sharedId)
+      const product = resolveProduct(sharedId)
       if (!product) {
         setNotice('공유된 모델을 찾을 수 없습니다.')
         return
@@ -1235,7 +1236,7 @@ export default function App() {
       setActiveBrandId(brandIdForProduct(product))
       setDetailReturnCategoryId(null)
       setModelMenuCategoryId(null)
-      setSelected(product)
+      setSelected(expandProducts([product])[0])
     }
 
     restoreSharedState()
@@ -1248,18 +1249,22 @@ export default function App() {
   const catalogMotors = useMemo(() => activeBrandId !== 'robotis' || robotisLineup === 'all'
     ? brandMotors
     : brandMotors.filter((product) => robotisLineup === 'legacy' ? product.lifecycle === 'legacy' : product.lifecycle !== 'legacy'), [activeBrandId, brandMotors, robotisLineup])
+  const individualMotors = useMemo(() => expandProducts(catalogMotors), [catalogMotors])
+  const usesTorque = brandUsesTorque(activeBrandId) || categoryId === 'stepper'
+  const capacityScope = individualMotors.filter(product => categoryId === 'all' || product.categoryId === categoryId)
+  useEffect(() => setPowerFloor(0), [categoryId])
   const activeCategories = useMemo(() => categoriesForBrand(activeBrandId).filter((category) => catalogMotors.some((motor) => motor.categoryId === category.id)), [activeBrandId, catalogMotors])
-  const categoryCounts = useMemo(() => Object.fromEntries(categories.map((category) => [category.id, catalogMotors.filter((motor) => motor.categoryId === category.id).length])), [catalogMotors])
+  const categoryCounts = useMemo(() => Object.fromEntries(categories.map((category) => [category.id, individualMotors.filter((motor) => motor.categoryId === category.id).length])), [individualMotors])
   const robotisFamilies = useMemo(() => Array.from(new Set(catalogMotors.flatMap((motor) => motor.family ? [motor.family] : []))).sort(compareDynamixelFamilies), [catalogMotors])
   const visibleMotors = useMemo(() => {
-    const narrowed = catalogMotors
+    const narrowed = individualMotors
       .filter((product) => categoryId === 'all' || product.categoryId === categoryId)
       .filter((product) => familyId === 'all' || product.family === familyId)
-      .filter((product) => powerFloor === 0 || selectionCapabilityValue(product) >= powerFloor)
+      .filter((product) => powerFloor === 0 || ((usesTorque || product.categoryId !== 'stepper') && selectionCapabilityValue(product) >= powerFloor))
       .filter((product) => supportsSelectionVoltage(product, directoryVoltage))
       .filter((product) => supportsSelectionProtocol(product, directoryProtocol))
     return matchesQuery(narrowed, query).sort((a, b) => b.weight - a.weight)
-  }, [activeBrandId, catalogMotors, categoryId, directoryProtocol, directoryVoltage, familyId, powerFloor, query])
+  }, [individualMotors, usesTorque, categoryId, directoryProtocol, directoryVoltage, familyId, powerFloor, query])
   const visibleMotorGroups = useMemo(() => activeBrandId === 'robotis' && familyId === 'all'
     ? robotisFamilies.map((family) => ({ family, products: visibleMotors.filter((product) => product.family === family) })).filter((group) => group.products.length > 0)
     : [], [activeBrandId, familyId, robotisFamilies, visibleMotors])
@@ -1272,7 +1277,7 @@ export default function App() {
       .map((brand) => ({
         id: brand.id,
         name: brand.name,
-        count: matchesQuery(motors.filter((product) => product.brand === manufacturerByBrandId[brand.id]), query).length,
+        count: matchesQuery(selectionProducts.filter((product) => product.brand === manufacturerByBrandId[brand.id]), query).length,
       }))
       .filter((hit) => hit.count > 0)
   }, [activeBrandId, query, visibleMotors.length])
@@ -1280,7 +1285,7 @@ export default function App() {
   // 안내가 없으면 카탈로그가 조용히 줄어든다(통신 조건은 전체 중 절반 이상이 정보 없음).
   const directoryUndisclosed = useMemo(() => {
     if (directoryVoltage === 'all' && directoryProtocol === 'all' && powerFloor === 0) return 0
-    return catalogMotors
+    return individualMotors
       .filter((product) => categoryId === 'all' || product.categoryId === categoryId)
       .filter((product) => {
         const missingVoltage = directoryVoltage !== 'all' && !supportsSelectionVoltage(product, directoryVoltage)
@@ -1290,24 +1295,24 @@ export default function App() {
         const missingCapacity = powerFloor > 0 && selectionCapabilityValue(product) < 0
         return missingVoltage || missingProtocol || missingCapacity
       }).length
-  }, [catalogMotors, categoryId, directoryProtocol, directoryVoltage, powerFloor])
+  }, [individualMotors, categoryId, directoryProtocol, directoryVoltage, powerFloor])
   const directoryPowerChoices = useMemo(() => {
-    const options = brandUsesTorque(activeBrandId) ? torqueOptionsFor(catalogMotors, activeBrandId) : powerOptionsFor(catalogMotors)
+    const options = usesTorque ? torqueOptionsFor(capacityScope, activeBrandId) : powerOptionsFor(capacityScope.filter(product => product.categoryId !== 'stepper'))
     return options.some((option) => option.value === powerFloor)
       ? options
       : [...options, { value: powerFloor, label: `${selectionCapabilityLabel(powerFloor, activeBrandId)} (현재)` }]
-  }, [activeBrandId, catalogMotors, powerFloor])
+  }, [activeBrandId, individualMotors, categoryId, usesTorque, powerFloor])
   // 전원·통신 목록은 고정 목록이라 제조사를 좁히면 결과가 0건인 항목이 그대로 남았다.
   // (예: LS메카피온은 48 V만, 미키풀리는 24 V만 존재하고 통신은 아예 없다)
   // 실제로 결과가 있는 항목만 남기고, 현재 고른 값은 항상 유지한다.
   const directoryVoltageChoices = useMemo(() => selectionVoltageOptions.filter((option) => option.value === 'all'
     || option.value === directoryVoltage
-    || catalogMotors.some((product) => supportsSelectionVoltage(product, option.value))),
-  [catalogMotors, directoryVoltage])
+    || capacityScope.some((product) => supportsSelectionVoltage(product, option.value))),
+  [individualMotors, categoryId, directoryVoltage])
   const directoryProtocolChoices = useMemo(() => selectionProtocolOptions.filter((option) => option.value === 'all'
     || option.value === directoryProtocol
-    || catalogMotors.some((product) => supportsSelectionProtocol(product, option.value))),
-  [catalogMotors, directoryProtocol])
+    || capacityScope.some((product) => supportsSelectionProtocol(product, option.value))),
+  [individualMotors, categoryId, directoryProtocol])
 
   const searchExamples = activeBrandId === 'robotis'
     ? [{ label: 'XM430', query: 'XM430' }, { label: '4.1 Nm', query: '4.1 Nm' }, { label: 'RS-485', query: 'RS-485' }]
@@ -1320,9 +1325,9 @@ export default function App() {
           : activeBrandId === 'mikipulley'
             ? [{ label: 'BXR', query: 'BXR' }, { label: 'BXR-LE', query: 'BXR-LE' }, { label: '무여자 작동형', query: '무여자 작동형' }]
         : [{ label: '48V 프레임리스', query: '48V 프레임리스' }, { label: '750W', query: '750W' }, { label: 'EtherCAT', query: 'EtherCAT' }]
-  const comparisonProducts = comparison.map((id) => motors.find((motor) => motor.id === id)).filter((product): product is MotorProduct => Boolean(product))
-  const favoriteProducts = favorites.map((id) => motors.find((motor) => motor.id === id)).filter((product): product is MotorProduct => Boolean(product))
-  const recentProducts = recents.map((id) => motors.find((motor) => motor.id === id)).filter((product): product is MotorProduct => Boolean(product))
+  const comparisonProducts = comparison.map(resolveProduct).filter((product): product is MotorProduct => Boolean(product))
+  const favoriteProducts = favorites.map(resolveProduct).filter((product): product is MotorProduct => Boolean(product))
+  const recentProducts = recents.map(resolveProduct).filter((product): product is MotorProduct => Boolean(product))
   const modelMenuProducts = modelMenuCategoryId
     ? catalogMotors
       .filter((motor) => motor.categoryId === modelMenuCategoryId)
@@ -1356,6 +1361,7 @@ export default function App() {
   }
 
   const openDetail = (product: MotorProduct, tab: DetailTab = 'specs', returnCategoryId: CategoryId | null = null, fastechVariantId: string | null = null) => {
+    product = (fastechVariantId ? resolveProduct(`${product.id}::${fastechVariantId}`) : expandProducts([product])[0]) ?? product
     setRecents((current) => [product.id, ...current.filter((id) => id !== product.id)].slice(0, 10))
     setDetailTab(tab)
     setDetailFastechVariantId(fastechVariantId)
@@ -1369,7 +1375,7 @@ export default function App() {
     setModelMenuFastechSeries(product.series)
     setModelMenuCategoryId(product.categoryId)
   }
-  const openCatalogItem = (product: MotorProduct) => product.brand === 'FASTECH' ? openFastechModelMenu(product) : openDetail(product)
+  const openCatalogItem = (product: MotorProduct) => product.brand === 'FASTECH' && !product.id.includes('::') ? openFastechModelMenu(product) : openDetail(product)
   const closeDetail = () => {
     clearSharedModelHash()
     setSelected(null)
@@ -1407,11 +1413,6 @@ export default function App() {
       setNotice('조합표를 복사하지 못했습니다. 다시 시도해 주세요.')
     }
   }
-  const ensureServerApiAvailable = () => {
-    if (SERVER_API_AVAILABLE) return true
-    setNotice(SERVER_ONLY_NOTICE)
-    return false
-  }
   const shareModel = async (product: MotorProduct) => {
     const url = sharedModelUrl(product)
     const text = sharedModelText(product, url)
@@ -1436,7 +1437,11 @@ export default function App() {
   const openManual = (product: MotorProduct) => {
     const manual = manualPdfFor(product)
     if (!manual) return
-    if (!ensureServerApiAvailable()) return
+    if (!SERVER_API_AVAILABLE) {
+      window.open(manual.url, '_blank', 'noopener,noreferrer')
+      setNotice('공식 원문을 엽니다. 제조사에서 직접 접속을 제한하면 공식 제품 페이지의 자료실을 이용하세요.')
+      return
+    }
     setRecents((current) => [product.id, ...current.filter((id) => id !== product.id)].slice(0, 10))
     const manualUrl = new URL('/api/manual-pdf', window.location.origin)
     manualUrl.searchParams.set('series', product.series)
@@ -1448,7 +1453,11 @@ export default function App() {
       window.open(drawing.url, '_blank', 'noopener,noreferrer')
       return
     }
-    if (!ensureServerApiAvailable()) return
+    if (!SERVER_API_AVAILABLE) {
+      window.open(drawing.url, '_blank', 'noopener,noreferrer')
+      setNotice('공식 도면을 엽니다. 직접 접속이 제한되면 공식 제품 페이지를 이용하세요.')
+      return
+    }
     const drawingUrl = new URL('/api/drawing-zip', window.location.origin)
     drawingUrl.searchParams.set('series', product.series)
     drawingUrl.searchParams.set('id', drawing.id)
@@ -1473,15 +1482,16 @@ export default function App() {
     })
   }
   const downloadComparison = async (products: MotorProduct[]) => {
-    if (!ensureServerApiAvailable()) return
     setComparisonDownloadPending(true)
     try {
-      const downloadUrl = new URL('/api/comparison-xlsx', window.location.origin)
-      products.forEach((product) => downloadUrl.searchParams.append('id', product.id))
-      const response = await fetch(downloadUrl)
-      if (!response.ok) throw new Error(`Comparison export failed with ${response.status}`)
-
-      const blob = await response.blob()
+      const rows = [
+        ...comparisonRowsFor(products).map(row => [row.label, ...row.values]),
+        ['제조사', ...products.map(product => product.brand)],
+        ['공식 원문', ...products.map(product => product.officialUrl)],
+        ['데이터 확인일', ...products.map(product => product.sourceChecked)],
+      ]
+      const bytes = buildComparisonXlsx(['항목', ...products.map(product => product.model)], rows)
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
       link.download = 'Magicup-Motor-Atlas-Comparison.xlsx'
@@ -1583,11 +1593,11 @@ export default function App() {
           <div className="filter-row" aria-label="모델 필터">
             <div className="filter-label"><Icon name="sliders" size={18} /> 필터</div>
             <div className="filter-group">
-              <button className={categoryId === 'all' ? 'is-active' : ''} onClick={() => setCategoryId('all')}>전체 <span>{catalogMotors.length}</span></button>
+              <button className={categoryId === 'all' ? 'is-active' : ''} onClick={() => setCategoryId('all')}>전체 <span>{individualMotors.length}</span></button>
               {activeCategories.map((category) => <button key={category.id} className={categoryId === category.id ? 'is-active' : ''} onClick={() => setCategoryId(category.id)}>{category.name}<span>{categoryCounts[category.id]}</span></button>)}
             </div>
             <div className="power-filter">
-              <label htmlFor="power-select">{activeBrandId === 'robotis' ? '최소 공개 토크' : activeBrandId === 'fastech' ? '최소 홀딩 토크' : '최소 출력'}</label>
+              <label htmlFor="power-select">{usesTorque ? (activeBrandId === 'mikipulley' ? '최소 정지 마찰 토크' : categoryId === 'stepper' || activeBrandId === 'fastech' ? '최소 홀딩 토크' : '최소 공개 토크') : '최소 출력'}</label>
               <select id="power-select" value={powerFloor} onChange={(event) => setPowerFloor(Number(event.target.value))}>
                 {directoryPowerChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -1672,7 +1682,7 @@ export default function App() {
 
       {comparisonProducts.length > 0 && !comparisonCollapsed && <ComparisonTray products={comparisonProducts} onRemove={(id) => setComparison((current) => current.filter((item) => item !== id))} onClear={() => { setComparison([]); setComparisonCollapsed(false) }} onClose={() => setComparisonCollapsed(true)} onOpen={openDetail} onDownload={downloadComparison} downloadPending={comparisonDownloadPending} />}
       {comparisonProducts.length > 0 && comparisonCollapsed && <button className="comparison-reopen" onClick={() => setComparisonCollapsed(false)}><Icon name="grid" size={16} />비교표 열기 <span>{comparisonProducts.length}</span></button>}
-      {modelMenuCategoryId && <ModelBrowserModal category={categoryForBrand(activeBrandId, modelMenuCategoryId)} products={modelMenuProducts} seriesName={modelMenuFastechSeries} onClose={() => { setModelMenuCategoryId(null); setModelMenuFastechSeries(null) }} onSelect={(product, fastechVariantId) => { const returnCategoryId = modelMenuCategoryId; setModelMenuCategoryId(null); openDetail(product, 'manual', returnCategoryId, fastechVariantId ?? null) }} />}
+      {modelMenuCategoryId && <ModelBrowserModal category={categoryForBrand(activeBrandId, modelMenuCategoryId)} products={modelMenuProducts} allowedIds={visibleMotors.map(product => product.id)} seriesName={modelMenuFastechSeries} onClose={() => { setModelMenuCategoryId(null); setModelMenuFastechSeries(null) }} onSelect={(product, fastechVariantId) => { const returnCategoryId = modelMenuCategoryId; setModelMenuCategoryId(null); openDetail(product, 'manual', returnCategoryId, fastechVariantId ?? null) }} />}
       {selected && <DetailModal product={selected} favorite={favorites.includes(selected.id)} compared={comparison.includes(selected.id)} initialTab={detailTab} initialFastechVariantId={detailFastechVariantId ?? undefined} onClose={closeDetail} onBackToModels={detailReturnCategoryId ? returnToModelList : undefined} onFavorite={toggleFavorite} onCompare={toggleCompare} onShare={shareModel} onOpenOfficial={openOfficial} onOpenDrive={openDriveOfficial} selectedDriveKey={drivePairings[selected.id]} onSelectDrive={selectDrivePairing} onCopyPairing={copyDrivePairing} onOpenManual={openManual} onOpenDrawing={openDrawing} />}
       {notice && <div className="toast" role="status"><Icon name="spark" size={17} />{notice}</div>}
     </div>

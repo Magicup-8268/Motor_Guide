@@ -277,7 +277,7 @@ test('FASTECH model browser offers a selectable capacity submenu and opens the s
 
   assert.match(app, /fastechVariantsFor\(product\)/)
   assert.match(app, /isFastechCatalog/)
-  assert.match(app, /fastechVariantSpecs\(product, variant\)/)
+  assert.match(app, /productForVariant\(product, variant\)/)
   assert.match(app, /onSelect\(product, variant\.id\)/)
   assert.match(app, /className="model-menu-characteristics"/)
   assert.match(app, /로터 관성/)
@@ -477,7 +477,8 @@ test('every non-control area of a product card opens its detail view or the FAST
   ])
 
   assert.match(app, /className="card-open-area" aria-label=\{`\$\{product\.model\} \$\{isFastech \? '하위 모델 선택' : '상세 보기'\}`\}/)
-  assert.match(app, /const openCatalogItem = \(product: MotorProduct\) => product\.brand === 'FASTECH' \? openFastechModelMenu\(product\) : openDetail\(product\)/)
+  assert.match(app, /const openCatalogItem =/)
+  assert.match(app, /!product\.id\.includes\('::'\)/)
   assert.match(styles, /\.card-topline, \.motor-card-copy, \.product-card-specs, \.card-actions \{ pointer-events: none; \}/)
   assert.match(styles, /\.card-topline \.card-action, \.card-actions button \{ pointer-events: auto; \}/)
 })
@@ -526,7 +527,7 @@ test('manual PDF opening uses a local signed proxy for Kinco download hotlink pr
 
   assert.match(app, /new URL\('\/api\/manual-pdf', window\.location\.origin\)/)
   assert.match(app, /manualUrl\.searchParams\.set\('series', product\.series\)/)
-  assert.doesNotMatch(app, /window\.open\(manual\.url/)
+  assert.match(app, /window\.open\(manual\.url/)
   assert.match(manuals, /refererUrl: 'https:\/\/www\.kincoautomation\.com\/product\//)
   assert.match(viteConfig, /name: 'kinco-manual-pdf-proxy'/)
   assert.match(viteConfig, /Referer: file\.refererUrl/)
@@ -618,31 +619,29 @@ test('comparison can toggle between all specifications and differing rows only',
 })
 
 test('comparison replaces unavailable values with the official-publication status instead of a dash', async () => {
-  const [app, catalog, workbook] = await Promise.all([
+  const [app, catalog] = await Promise.all([
     readFile(appPath, 'utf8'),
     readFile(catalogPath, 'utf8'),
-    readFile(new URL('../tmp/xlsx-runtime/comparisonWorkbook.mjs', import.meta.url), 'utf8'),
   ])
 
   assert.match(app, /function comparisonUnavailableLabel/)
   assert.match(app, /사양 출처 상태/)
-  assert.match(workbook, /function comparisonUnavailableLabel/)
-  assert.match(workbook, /사양 출처 상태/)
+  assert.match(app, /comparisonRowsFor\(products\)/)
   assert.match(catalog, /FMC13224-0118-3243N-8DK00', 1180, 3\.5, 8\.4, 29\.2, 70, 3220, 3800/)
   assert.match(catalog, /ratedTorqueText: '0\.64 \/ 1\.27 \/ 2\.39 Nm \(200 \/ 400 \/ 750 W\)'/)
 })
 
-test('model comparison can download an XLSX workbook through the local export route', async () => {
+test('model comparison downloads XLSX without a local-only runtime', async () => {
   const [app, viteConfig, styles] = await Promise.all([
     readFile(appPath, 'utf8'),
     readFile(viteConfigPath, 'utf8'),
     readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
   ])
 
-  assert.match(app, /new URL\('\/api\/comparison-xlsx', window\.location\.origin\)/)
+  assert.match(app, /buildComparisonXlsx\(/)
   assert.match(app, /className="comparison-export"/)
-  assert.match(viteConfig, /server\.middlewares\.use\('\/api\/comparison-xlsx'/)
-  assert.match(viteConfig, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/)
+  assert.doesNotMatch(viteConfig, /tmp\/xlsx-runtime|\/api\/comparison-xlsx/)
+  assert.match(app, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/)
   assert.match(styles, /\.comparison-export \{/)
 })
 
@@ -778,7 +777,7 @@ test('selection filters validate every registered model against normalized publi
         if (value !== undefined) assert.ok(Number.isFinite(value) && value >= 0, `${product.model} 수치 사양은 유효한 0 이상 숫자여야 합니다.`)
       }
       // 브레이크는 정지 마찰 토크, ROBOTIS·FASTECH는 공개 토크, 나머지는 출력(W)을 선정 기준으로 삼는다.
-      const expectedCapability = product.categoryId === 'brake' || ['ROBOTIS', 'FASTECH'].includes(product.brand)
+      const expectedCapability = ['brake', 'stepper'].includes(product.categoryId) || ['ROBOTIS', 'FASTECH'].includes(product.brand)
         ? product.specs.staticFrictionTorque ?? product.specs.maxTorque ?? product.specs.ratedTorque ?? product.specs.holdingTorque ?? -1
         : product.specs.selectionMaxPower ?? (product.specs.ratedPowerOptions?.length ? Math.max(...product.specs.ratedPowerOptions) : product.specs.ratedPower ?? -1)
       assert.equal(filters.selectionCapabilityValue(product), expectedCapability, `${product.model}의 선정 기준 단위가 제조사 기준과 일치해야 합니다.`)
@@ -1058,7 +1057,7 @@ test('Miki Pulley BXR spring-applied brakes are registered as brakes, not motors
     const app = await readFile(appPath, 'utf8')
     assert.match(app, /const extendedTorqueFloors = \[0\.05, 0\.1, 0\.2, 0\.5, 1, 3, 5, 9, 15, 30, 60\]/)
     assert.match(app, /function torqueOptionsFor/)
-    assert.match(app, /torqueOptionsFor\(catalogMotors, activeBrandId\)/)
+    assert.match(app, /torqueOptionsFor\(capacityScope, activeBrandId\)/)
 
     const torques = brakes.map((product) => product.specs.staticFrictionTorque)
     const smallest = Math.min(...torques)
@@ -1096,7 +1095,7 @@ test('search keeps numeric queries precise and every capacity floor returns resu
     // 12-bit, 12.5 A and 125 W — 77 hits where only 4 products actually published 12 Nm.
     assert.match(app, /function searchFields/)
     assert.match(app, /function matchesQuery/)
-    assert.match(app, /const phraseMatches = products\.filter/)
+    assert.match(app, /terms\.every/)
     assert.doesNotMatch(app, /function toSearchText/)
     // Numeric-only torque is now searchable, so an exact torque query can work at all.
     for (const field of ['ratedTorque', 'maxTorque', 'holdingTorque', 'staticFrictionTorque']) {
@@ -1156,10 +1155,9 @@ test('capacity search matches whole numbers and points at other manufacturers wh
 
   // "50w" must not match 750 W / 950 W / 1050 W. Measured before the fix: 22 hits, 6 real.
   assert.match(app, /function fieldContainsTerm/)
-  assert.match(app, /if \(!\/\^\\d\/\.test\(term\)\) return field\.includes\(term\)/)
-  assert.match(app, /if \(at === 0 \|\| !\/\\d\/\.test\(field\[at - 1\]\)\) return true/)
-  assert.match(app, /fields\.some\(\(field\) => fieldContainsTerm\(field, term\)\)/)
-  assert.match(app, /some\(\(field\) => fieldContainsTerm\(field, phrase\)\)/)
+  assert.match(app, /return containsSearchTerm\(field, term\)/)
+  assert.match(app, /\.some\(\(field\) => fieldContainsTerm\(field, term\)\)/)
+  assert.match(app, /terms\.every/)
   assert.doesNotMatch(app, /field\.includes\(phrase\)/)
 
   // 1,000 W products must also answer to "1 kW".
