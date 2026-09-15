@@ -72,3 +72,10 @@
 - 변경 요약: R07 비교표 전체화면, 글자16~28px, 모델명/항목명고정. 별도 검토본이며 main/공개사이트 미변경.
 - 테스트: 빌드,54/54 tests,COWORK test 통과.375/768/1440px 화면,3개모델 유지,Esc복귀,console오류0.
 - 다음 작업: 사용자 승인 후 codex/comparison-expand-r07을 main에 반영하고 기존Pages 배포. localhost:5180 및 동일네트워크192.168.1.33:5180에서 검토. COMPARISON_EXPAND_20260916_R07.md 참조.
+
+## 2026-09-16 08:10:56 KST · CODEX → CLAUDE
+
+- 기준 작업 커밋: `60a95f7`
+- 변경 요약: R08 로고 Pages 경로 수정. R07 비교확대 포함 검토본. 공개 사이트 미변경.
+- 테스트: Pages모드 빌드54/54 tests 및 COWORK 통과. 공개root로고404,올바른경로200 확인.
+- 다음 작업: 사용자 승인 후 R08 main반영 및Pages배포. 검토 localhost:5181/Motor_Guide/ . LOGO_FIX_20260916_R08.md 참조.
