@@ -658,3 +658,10 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 23px
 @media (min-width: 761px) and (max-width: 900px) {
   .model-menu-characteristics { grid-template-columns: minmax(0, 1fr); }
 }
+.maxon-highlight { display: grid; gap: 8px; margin: 20px 0; padding: 18px 20px; border: 2px solid #00C922; border-radius: 14px; background: #E8FFED; color: #004C0C; word-break: keep-all; overflow-wrap: break-word; }
+.maxon-highlight strong { font-size: clamp(20px, 2.2vw, 28px); line-height: 1.3; font-weight: 800; }
+.maxon-highlight span { font-size: 14px; }
+.maxon-highlight a { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; color: #004C0C; text-decoration: underline; font-weight: 700; }
+.maxon-highlight a:focus-visible { outline: 3px solid #004C0C; outline-offset: 3px; }
+.spec-list .maxon-spec { padding: 12px; border: 2px solid #00C922; border-radius: 10px; background: #E8FFED; }
+.spec-list .maxon-spec dt, .spec-list .maxon-spec dd { color: #004C0C; font-weight: 800; }
