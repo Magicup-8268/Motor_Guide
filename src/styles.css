@@ -466,7 +466,27 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 23px
 
 .compare-tray { position: fixed; z-index: 20; right: 24px; bottom: 24px; width: min(760px, calc(100% - 48px)); max-height: min(440px, calc(100dvh - 48px)); padding: 18px; overflow: auto; background: rgba(9, 21, 36, 0.97); border: 1px solid rgba(166, 220, 255, 0.28); border-radius: 17px; box-shadow: 0 20px 70px rgba(0, 0, 0, 0.38); backdrop-filter: blur(20px); }
 .compare-tray-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
-.compare-tray-actions { display: flex; align-items: center; gap: 10px; }
+.compare-tray-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.comparison-expand, .comparison-font-controls button { min-width: 44px; min-height: 44px; padding: 8px 12px; border: 1px solid #009E1A; border-radius: 8px; background: #C6FFD1; color: #004C0C; font: inherit; font-weight: 700; }
+.comparison-expand:focus-visible, .comparison-font-controls button:focus-visible, .comparison-fullscreen :focus-visible { outline: 3px solid #00F629; outline-offset: 2px; }
+.comparison-font-controls { display: flex; align-items: center; gap: 8px; color: #fff; }
+.comparison-font-controls button:disabled { opacity: .45; cursor: default; }
+.comparison-fullscreen { position: fixed; inset: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: #151515; color: #fff; }
+.comparison-fullscreen::backdrop { background: rgba(0,0,0,.7); }
+.comparison-fullscreen .compare-tray-expanded { position: static; display: flex; flex-direction: column; width: 100%; height: 100%; max-height: none; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); overflow: hidden; border: 0; border-radius: 0; background: #151515; backdrop-filter: none; font-family: "Malgun Gothic","맑은 고딕","NanumGothic",sans-serif; }
+.compare-tray-expanded .compare-tray-head { flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+.compare-tray-expanded .comparison-conclusion, .compare-tray-expanded .comparison-insights ul, .compare-tray-expanded .comparison-insights > p, .compare-tray-expanded .comparison-insights-head > span, .compare-tray-expanded .comparison-insights-controls > strong { display: none; }
+.compare-tray-expanded .comparison-insights { flex-shrink: 0; margin-top: 8px; padding: 0; border: 0; background: none; }
+.compare-tray-expanded .compare-table-wrap { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.compare-tray-expanded .compare-table { border-collapse: separate; border-spacing: 0; }
+.compare-tray-expanded .compare-table th, .compare-tray-expanded .compare-table td { padding: 12px; font-size: inherit; line-height: 1.65; letter-spacing: -.012em; color: #fff; background: #151515; border-color: #555; word-break: keep-all; overflow-wrap: break-word; }
+.compare-tray-expanded .compare-table tbody tr.has-difference td { background: #004C0C; }
+.compare-tray-expanded .compare-table thead th { position: sticky; top: 0; z-index: 2; background: #303030; }
+.compare-tray-expanded .compare-table thead th:first-child, .compare-tray-expanded .compare-table tbody th { position: sticky; left: 0; width: clamp(108px, 24vw, 180px); z-index: 1; background: #303030; }
+.compare-tray-expanded .compare-table thead th:first-child { z-index: 3; }
+.compare-tray-expanded .compare-table thead th > button:first-child { font-size: inherit; padding-right: 44px; min-height: 44px; }
+.compare-tray-expanded .remove-model { top: 6px; right: 0; width: 44px; height: 44px; }
+.compare-tray-expanded .compare-tray-actions button, .compare-tray-expanded .project-shortcut, .compare-tray-expanded .difference-filter { min-height: 44px; }
 .comparison-export { min-height: 34px; padding: 0 12px; color: #06111f; background: var(--sky-300); border: 1px solid var(--sky-200); border-radius: 8px; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .comparison-export:hover:not(:disabled) { background: #a6dcff; }
 .comparison-export:disabled { cursor: wait; opacity: 0.72; }

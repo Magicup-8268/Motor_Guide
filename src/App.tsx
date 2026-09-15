@@ -1087,6 +1087,23 @@ export function comparisonRowsFor(products: MotorProduct[]) {
 
 function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownload, downloadPending }: { products: MotorProduct[]; onRemove: (id: string) => void; onClear: () => void; onClose: () => void; onOpen: (product: MotorProduct) => void; onDownload: (products: MotorProduct[]) => void; downloadPending: boolean }) {
   const [showDifferencesOnly, setShowDifferencesOnly] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [textSize, setTextSize] = useState(18)
+  const expandedDialog = useRef<HTMLDialogElement>(null)
+  const expandButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!expanded) return
+    const dialog = expandedDialog.current!
+    const previousOverflow = document.body.style.overflow
+    dialog.showModal()
+    document.body.style.overflow = 'hidden'
+    return () => {
+      dialog.close()
+      document.body.style.overflow = previousOverflow
+      requestAnimationFrame(() => expandButton.current?.focus())
+    }
+  }, [expanded])
+  const openComparedModel = (product: MotorProduct) => { setExpanded(false); onOpen(product) }
   const conclusion = comparisonConclusion(products)
   const populatedRows = comparisonRowsFor(products)
     .map(({label, values}) => {
@@ -1109,11 +1126,17 @@ function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownlo
     .slice(0, 3)
   const visibleRows = showDifferencesOnly ? populatedRows.filter((row) => row.hasDifference) : populatedRows
 
-  return (
-    <section className="compare-tray" aria-label="선택 모델 비교">
+  const tray = (
+    <section className={`compare-tray${expanded ? ' compare-tray-expanded' : ''}`} aria-label="선택 모델 비교">
       <div className="compare-tray-head">
         <div><p className="section-eyebrow">COMPARE / {products.length} OF 3</p><h2>선택 모델 비교</h2></div>
         <div className="compare-tray-actions">
+          <button className="comparison-expand" ref={expanded ? undefined : expandButton} onClick={() => setExpanded(current => !current)}>{expanded ? '확대 닫기' : '⛶ 크게 보기'}</button>
+          {expanded && <div className="comparison-font-controls" role="group" aria-label="비교표 글자 크기">
+            <button aria-label="비교표 글자 축소" disabled={textSize <= 16} onClick={() => setTextSize(size => Math.max(16, size - 2))}>−</button>
+            <output aria-live="polite">{textSize}px</output>
+            <button aria-label="비교표 글자 확대" disabled={textSize >= 28} onClick={() => setTextSize(size => Math.min(28, size + 2))}>+</button>
+          </div>}
           <a className="project-shortcut" href="#projects" onClick={() => { onClose(); const shelf = document.querySelector<HTMLDetailsElement>('#projects'); if (shelf) shelf.open = true }}>프로젝트 선정함</a>
           <button className="comparison-export" onClick={() => onDownload(products)} disabled={downloadPending}>{downloadPending ? '엑셀 생성 중…' : '엑셀 다운로드'}</button>
           <button className="text-button comparison-close" onClick={onClose} aria-label="선택 모델 비교 닫기"><Icon name="x" size={14} />닫기</button>
@@ -1125,12 +1148,12 @@ function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownlo
         <div className="comparison-conclusion-cards">
           <article>
             <span>{products.length > 1 ? '비교 기준 모델 · 선정 순위 아님' : '현재 후보'}</span>
-            <button className="comparison-conclusion-model" onClick={() => onOpen(conclusion.primary)}>{conclusion.primary.model}<Icon name="arrow-up-right" size={13} /></button>
+            <button className="comparison-conclusion-model" onClick={() => openComparedModel(conclusion.primary)}>{conclusion.primary.model}<Icon name="arrow-up-right" size={13} /></button>
             <p>{conclusion.primaryReason}</p>
           </article>
           {conclusion.alternative && <article>
             <span>대안 · 제어 연동/설치 조건</span>
-            <button className="comparison-conclusion-model" onClick={() => onOpen(conclusion.alternative!)}>{conclusion.alternative.model}<Icon name="arrow-up-right" size={13} /></button>
+            <button className="comparison-conclusion-model" onClick={() => openComparedModel(conclusion.alternative!)}>{conclusion.alternative.model}<Icon name="arrow-up-right" size={13} /></button>
             <p>{conclusion.alternativeReason}</p>
           </article>}
         </div>
@@ -1155,14 +1178,20 @@ function ComparisonTray({ products, onRemove, onClear, onClose, onOpen, onDownlo
           </li>)}
         </ul> : <p>선택한 모델의 공개 사양에서 비교 가능한 차이를 찾지 못했습니다.</p>}
       </section>
-      <div className="compare-table-wrap">
-        <table className="compare-table">
-          <thead><tr><th scope="col">항목</th>{products.map((product) => <th scope="col" key={product.id}><button onClick={() => onOpen(product)}>{product.model}</button><button className="remove-model" aria-label={`${product.model} 비교함에서 제거`} onClick={() => onRemove(product.id)}><Icon name="x" size={14} /></button></th>)}</tr></thead>
+      <div className="compare-table-wrap" tabIndex={expanded ? 0 : undefined} role={expanded ? 'region' : undefined} aria-label={expanded ? '확대 비교표, 가로와 세로로 스크롤 가능' : undefined}>
+        <table className="compare-table" style={expanded ? { fontSize: textSize, minWidth: `${12 + products.length * 17}em` } : undefined}>
+          <thead><tr><th scope="col">항목</th>{products.map((product) => <th scope="col" key={product.id}><button onClick={() => openComparedModel(product)}>{product.model}</button><button className="remove-model" aria-label={`${product.model} 비교함에서 제거`} onClick={() => onRemove(product.id)}><Icon name="x" size={14} /></button></th>)}</tr></thead>
           <tbody>{visibleRows.length > 0 ? visibleRows.map((row) => <tr key={row.label} className={`${row.hasDifference ? 'has-difference' : 'is-same'}${row.hasUnavailableValue ? ' has-unavailable' : ''}`}><th scope="row">{row.label}</th>{row.values.map((value, index) => <td key={products[index].id}>{value}</td>)}</tr>) : <tr className="comparison-empty-row"><td colSpan={products.length + 1}>선택한 모델의 공개 사양에서 차이점을 찾지 못했습니다.</td></tr>}</tbody>
         </table>
       </div>
     </section>
   )
+  return <>
+    {!expanded && tray}
+    <dialog className="comparison-fullscreen" ref={expandedDialog} aria-label="선택 모델 비교 크게 보기" onCancel={() => setExpanded(false)} onKeyDown={event => { if (event.key === 'Escape') event.stopPropagation() }}>
+      {expanded && tray}
+    </dialog>
+  </>
 }
 
 export function filterDirectoryProducts(products: MotorProduct[], criteria: {
