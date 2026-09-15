@@ -665,3 +665,12 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 23px
 .maxon-highlight a:focus-visible { outline: 3px solid #004C0C; outline-offset: 3px; }
 .spec-list .maxon-spec { padding: 12px; border: 2px solid #00C922; border-radius: 10px; background: #E8FFED; }
 .spec-list .maxon-spec dt, .spec-list .maxon-spec dd { color: #004C0C; font-weight: 800; }
+.rated-power-filter { margin: 18px 0 28px; padding: 16px; min-width: 0; border: 1px solid #009E1A; border-radius: 14px; }
+.rated-power-filter legend { font-weight: 700; padding: 0 8px; }
+.rated-power-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.rated-power-controls label { display: grid; gap: 6px; flex: 1 1 180px; min-width: 0; }
+.rated-power-controls input, .rated-power-controls select, .rated-power-controls button { min-height: 44px; width: 100%; padding: 8px 12px; border: 1px solid #009E1A; border-radius: 8px; background: #FFFFFF; color: #000000; font: inherit; box-sizing: border-box; }
+.rated-power-controls button { width: auto; background: #E8FFED; cursor: pointer; }
+.rated-power-controls :focus-visible { outline: 3px solid #00C922; outline-offset: 3px; }
+.rated-power-filter p { margin: 10px 0 0; font-size: 14px; word-break: keep-all; overflow-wrap: break-word; }
+.rated-power-match { padding: 10px; border: 1px solid #009E1A; border-radius: 8px; color: #004C0C !important; background: #E8FFED; font-weight: 700; }
