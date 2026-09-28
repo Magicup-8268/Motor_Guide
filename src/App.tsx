@@ -680,6 +680,7 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
         <div className="model-title-block">
           <p className="series-label"><strong className="manufacturer-badge">제조사 · {product.brand}</strong> · {product.series}{product.lifecycle && <span className={`product-lifecycle is-${product.lifecycle}`}>{product.lifecycle === 'legacy' ? '레거시 자료' : '현재 라인업'}</span>}</p>
           <h3>{product.model}</h3>
+          {maxonSourceFor(product) && <span className="maxon-model-badge">maxon (맥슨) 코어리스 모터 적용</span>}
           {seriesOptions && <p className="rated-power-match">시리즈 자료 · 개별 주문 모델 확인 필요</p>}
         </div>
         <ProductThumbnail product={product} />
@@ -944,6 +945,7 @@ function ModelBrowserModal({ category, products, seriesName, allowedIds, onClose
               <span className="model-menu-main">
                 <small>{product.brand} · {product.series}</small>
                 <strong>{product.model}</strong>
+                {maxonSourceFor(product) && <span className="maxon-model-badge">maxon (맥슨) 코어리스 모터 적용</span>}
                 <span className="model-menu-specs">
                   {power && <span className="model-menu-power">{power}</span>}
                   <span className="model-menu-protocol"><b>통신</b><span>{communicationLabel(product)}</span></span>
