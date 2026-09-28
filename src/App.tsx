@@ -11,7 +11,7 @@ import { categoryProductImageFor, productImageFor } from './data/productImages'
 import { expandProducts, productForVariant, resolveProduct, selectionProducts } from './data/productSelections'
 import { normalizeSearch, queryTerms, containsSearchTerm } from './utils/search'
 import { buildComparisonXlsx } from './utils/comparisonXlsx'
-import { maxonSourceFor } from './data/motorManufacturer'
+import { maxonCheckedOn, maxonMotorFor } from './data/motorManufacturer'
 import { operatingPointError, operatingPointStatus, matchesOperatingPoint, type OperatingPoint } from './utils/operatingPoint'
 import { matchesRatedPower, matchingRatedPowers, ratedPowers, powerFilterError, type PowerFilter, type PowerMode } from './data/ratedPowerFilter'
 import type { BrandId, CategoryId, MotorProduct, MotorSpecs } from './types'
@@ -659,6 +659,7 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
   const category = categoryForProduct(product)
   const { specs } = product
   const power = modelPowerLabel(product)
+  const maxonMotor = maxonMotorFor(product)
   const driveCompatibility = driveCompatibilityFor(product)
   const hasPublishedProtocols = (specs.protocols?.length ?? 0) > 0
   const needsFeatureSummary = !power || !hasPublishedProtocols
@@ -680,7 +681,7 @@ function ProductCard({ product, favorite, compared, onSelect, onFavorite, onComp
         <div className="model-title-block">
           <p className="series-label"><strong className="manufacturer-badge">제조사 · {product.brand}</strong> · {product.series}{product.lifecycle && <span className={`product-lifecycle is-${product.lifecycle}`}>{product.lifecycle === 'legacy' ? '레거시 자료' : '현재 라인업'}</span>}</p>
           <h3>{product.model}</h3>
-          {maxonSourceFor(product) && <span className="maxon-model-badge">maxon (맥슨) 코어리스 모터 적용</span>}
+          {maxonMotor && <span className="maxon-model-badge">maxon (맥슨) {maxonMotor.type} 모터 적용</span>}
           {seriesOptions && <p className="rated-power-match">시리즈 자료 · 개별 주문 모델 확인 필요</p>}
         </div>
         <ProductThumbnail product={product} />
@@ -938,6 +939,7 @@ function ModelBrowserModal({ category, products, seriesName, allowedIds, onClose
             </button>
           }) : visibleProducts.map((product) => {
             const power = modelPowerLabel(product)
+            const maxonMotor = maxonMotorFor(product)
             const protocols = product.specs.protocols ?? []
             const needsFeatureSummary = !power || protocols.length === 0
 
@@ -945,7 +947,7 @@ function ModelBrowserModal({ category, products, seriesName, allowedIds, onClose
               <span className="model-menu-main">
                 <small>{product.brand} · {product.series}</small>
                 <strong>{product.model}</strong>
-                {maxonSourceFor(product) && <span className="maxon-model-badge">maxon (맥슨) 코어리스 모터 적용</span>}
+                {maxonMotor && <span className="maxon-model-badge">maxon (맥슨) {maxonMotor.type} 모터 적용</span>}
                 <span className="model-menu-specs">
                   {power && <span className="model-menu-power">{power}</span>}
                   <span className="model-menu-protocol"><b>통신</b><span>{communicationLabel(product)}</span></span>
@@ -993,7 +995,7 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
     ? productForVariant(product, selectedFastechVariant)
     : product
   const rows = specsToRows(displayProduct.specs)
-  const maxonSource = maxonSourceFor(displayProduct)
+  const maxonMotor = maxonMotorFor(displayProduct)
 
   useEffect(() => setActiveTab(initialTab), [initialTab, product.id])
   useEffect(() => setSelectedFastechVariantId(initialFastechVariantId ?? fastechVariants[0]?.id ?? ''), [initialFastechVariantId, product.id])
@@ -1007,10 +1009,10 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
           <span className="category-pill">{category.name}</span>
           <p className="series-label">{product.brand} · {product.series}</p>
           <h2 id="detail-title">{selectedFastechVariant?.model ?? product.model}</h2>
-          {maxonSource && <aside className="maxon-highlight" aria-label="맥슨 모터 적용 확인">
+          {maxonMotor && <aside className="maxon-highlight" aria-label="맥슨 모터 적용 확인">
             <strong>maxon (맥슨) 모터 적용</strong>
-            <span>내장 구동 모터: 코어리스 · 액추에이터 제조사: ROBOTIS</span>
-            <a href={maxonSource} target="_blank" rel="noopener noreferrer">ROBOTIS 공식 근거 확인 ↗ <small>2026-09-15 확인</small></a>
+            <span>내장 구동 모터: {maxonMotor.type} · 액추에이터 제조사: ROBOTIS</span>
+            <a href={maxonMotor.sourceUrl} target="_blank" rel="noopener noreferrer">ROBOTIS 공식 근거 확인 ↗ <small>{maxonCheckedOn} 확인</small></a>
           </aside>}
           {selectedFastechVariant && <p className="detail-selected-model">선택 하위 모델 · 홀딩 토크 {formatNumber(selectedFastechVariant.holdingTorque)} Nm · 상전류 {formatNumber(selectedFastechVariant.phaseCurrent)} A</p>}
           <p>{product.summary}</p>
@@ -1032,7 +1034,7 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
             <span className="source-mark">{product.sourceChecked} 확인</span>
           </div>
           <dl className="spec-list">
-            {maxonSource && <div className="maxon-spec"><dt>내장 모터 제조사</dt><dd>maxon (맥슨) · 코어리스 모터</dd></div>}
+            {maxonMotor && <div className="maxon-spec"><dt>내장 모터 제조사</dt><dd>maxon (맥슨) · {maxonMotor.type} 모터</dd></div>}
             {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
           <DriveCompatibilityPanel product={displayProduct} onOpenDrive={onOpenDrive} selectedDriveKey={selectedDriveKey} onSelectDrive={onSelectDrive} onCopyPairing={onCopyPairing} />
@@ -1060,7 +1062,7 @@ function DetailModal({ product, favorite, compared, initialTab, initialFastechVa
 
 export function comparisonRowsFor(products: MotorProduct[]) {
   const rows = [
-    ['내장 모터 제조사', (product: MotorProduct) => maxonSourceFor(product) ? 'maxon (맥슨) · 코어리스 · 공식 확인 2026-09-15' : '미확인 (maxon 미적용 판정 아님)'],
+    ['내장 모터 제조사', (product: MotorProduct) => { const motor = maxonMotorFor(product); return motor ? `maxon (맥슨) · ${motor.type} · 공식 확인 ${maxonCheckedOn}` : '미확인 (maxon 미적용 판정 아님)' }],
     ['정격 출력', (product: MotorProduct) => comparisonValue(product, 'power', ratedPowerLabel(product.specs))],
     ['정격 / 홀딩 / 정지 마찰 토크', (product: MotorProduct) => comparisonValue(product, 'rated-torque', staticFrictionTorqueLabel(product.specs) || ratedTorqueLabel(product.specs) || (product.specs.holdingTorque !== undefined ? `${formatNumber(product.specs.holdingTorque)} Nm (홀딩)` : ''))],
     ['토크 기준', (product: MotorProduct) => product.specs.torqueBasis ?? '정격 토크 · 최대 토크 별도 확인'],
